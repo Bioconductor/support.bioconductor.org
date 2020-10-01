@@ -76,7 +76,7 @@ ADD_THREAD_USERS = False
 GRAVATAR_ICON = 'identicon'
 
 # These parameters will be inserted into the database automatically.
-SITE_NAME = "Bioconductor Support Forum"
+SITE_NAME = "Bioconductor Forum"
 
 SITE_DOMAIN = "127.0.0.1"
 
