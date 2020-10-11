@@ -101,13 +101,26 @@ repository](https://github.com/Bioconductor/support.bioconductor.org/issues).
 
 #### What about offensive content?
 
+The [Bioconductor project-wide code of conduct](https://bioconductor.org/about/code-of-conduct/) 
+upholds community values that all participants are expected to support. TL;DR very abbreviated 
+version: do not engage in online behavior contrary to
+
+* diversity and inclusivity
+* kindness and a welcoming environment
+* openness in regard to software implementations
+
 Users posting content that does not belong to the site will be notified and
-required to edit their content. Users may post job postings to the 'Jobs'
-section as long as the topic aligns with the main focus of this site. Users
-posting obvious spam will be immediately suspended or banned. Moderators will
-try to remove offensive content in a timely fashion but if you find something
-offensvie please notify webmaster@bioconductor.org. Post not relating to
-*Bioconductor* content will generally be removed by moderators.
+required to edit their content. Users may post job postings to the 'Jobs' section as 
+long as the topic aligns with the main focus of this site. Users posting obvious spam 
+will be immediately suspended or banned. Moderators will try to remove offensive 
+content in a timely fashion but if you find something offensive please notify webmaster@bioconductor.org. 
+Post not relating to *Bioconductor* content will generally be removed by moderators.
+
+You can also make an anonymous or non-anonymous report via the following link: https://tinyurl.com/bioccomplaint. 
+It is a free-form text box that will be forwarded to the Code of Conduct Committee. 
+Alternatively you can email the Code of Conduct Committee (code-of-conduct@bioconductor.org). 
+If you are uncomfortable reporting to the Code of Conduct committee as a group, you can contact 
+any individual committee member via email or a direct message on the community-bioc Slack channel.
 
 <div style="text-align: right"> [ <a href="#top">Back to top</a> ] </div>
 
@@ -132,6 +145,10 @@ following:
   * Record the output of `traceback()` immediately after the error occurs.
   * Include the output of `sessionInfo()`.
   * Provide minimal code necessary to try and reproduce the issue. StackOverflow has suggestions for making a [reproducible example](https://stackoverflow.com/help/minimal-reproducible-example).
+
+Please make also sure to phrase your questions, answers and comments in a welcoming, 
+supportive, collegial, and harassment-free way, in line with the  
+[Bioconductor project-wide code of conduct](http://bioconductor.org/about/code-of-conduct/).
 
 <a name="p2"></a>
 
