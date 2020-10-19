@@ -120,7 +120,6 @@ def get_posts(user, topic="", tag="", order="", limit=None):
         query = query.exclude(Q(spam=Post.SPAM) | Q(status=Post.DELETED))
     # Filter by tags if specified.
     if tag:
-        tag = tag.strip()
         query = query.filter(tags__name=tag.lower())
 
     # Apply post ordering.
@@ -270,12 +269,9 @@ def tags_list(request):
     query = request.GET.get('query', '')
 
     count = Count('post', filter=Q(post__is_toplevel=True))
-    if query:
-        db_query = Q(name__in=query) | Q(name__contains=query)
-        cache_key = None
-    else:
-        db_query = Q()
-        cache_key = TAGS_CACHE_KEY
+
+    db_query = Q(name__icontains=query) if query else Q()
+    cache_key = None if query else TAGS_CACHE_KEY
 
     tags = Tag.objects.annotate(nitems=count).filter(db_query)
     tags = tags.order_by('-nitems')
@@ -341,12 +337,12 @@ def community_list(request):
 
     if query and len(query) > 2:
         db_query = Q(profile__name__icontains=query) | Q(profile__uid__icontains=query) | \
-                   Q(username__icontains=query) | Q(email=query) | \
-                   Q(email__icontains=query)
+                   Q(username__icontains=query) | Q(email__icontains=query)
         users = users.filter(db_query)
 
     # Remove the cache when filters are given.
-    cache_key = None if days or (query and len(query) > 2) or ordering else USERS_LIST_KEY
+    no_cache = days or (query and len(query) > 2) or ordering
+    cache_key = None if no_cache else USERS_LIST_KEY
 
     order = ORDER_MAPPER.get(ordering, "visit")
     users = users.filter(profile__state__in=[Profile.NEW, Profile.TRUSTED])
