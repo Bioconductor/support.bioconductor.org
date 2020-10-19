@@ -1,4 +1,3 @@
-
 ### About this site
 
 This site provides support for Bioconductor users. Bioconductor provides
@@ -7,16 +6,17 @@ data. Before posting, we recommend that you search the site for similar
 questions. Please look at our posting guide for tips on how to effectively ask
 your question.
 
-Please take a moment to read through the [Bioconductor code of conduct](https://bioconductor.org/about/code-of-conduct/). 
-It upholds community values that all participants are expected to support. 
+Please take a moment to read through the [Bioconductor code of conduct](https://bioconductor.org/about/code-of-conduct/).
+It upholds community values that all participants are expected to support.
+
 TL;DR very abbreviated version: do not engage in online behavior contrary to
 
 * diversity and inclusivity
 * kindness and a welcoming environment
 * openness in regard to software implementations
 
-By participating in this community, you agree to abide by the Code of Conduct, 
-which applies to both in person and virtual events and electronic communication 
+By participating in this community, you agree to abide by the Code of Conduct,
+which applies to both in person and virtual events and electronic communication
 channels (including but not limited to the support site).
 
 support.bioconductor.org is a a fork of Biostar. Please report bugs or feature

@@ -1,4 +1,3 @@
-
 # Frequently Asked Questions
 
 <a name="top"></a>
@@ -101,25 +100,26 @@ repository](https://github.com/Bioconductor/support.bioconductor.org/issues).
 
 #### What about offensive content?
 
-The [Bioconductor project-wide code of conduct](https://bioconductor.org/about/code-of-conduct/) 
-upholds community values that all participants are expected to support. TL;DR very abbreviated 
-version: do not engage in online behavior contrary to
+The [Bioconductor project-wide code of conduct](https://bioconductor.org/about/code-of-conduct/)
+upholds community values that all participants are expected to support.
+
+TL;DR very abbreviated version: do not engage in online behavior contrary to
 
 * diversity and inclusivity
 * kindness and a welcoming environment
 * openness in regard to software implementations
 
 Users posting content that does not belong to the site will be notified and
-required to edit their content. Users may post job postings to the 'Jobs' section as 
-long as the topic aligns with the main focus of this site. Users posting obvious spam 
-will be immediately suspended or banned. Moderators will try to remove offensive 
-content in a timely fashion but if you find something offensive please notify webmaster@bioconductor.org. 
+required to edit their content. Users may post job postings to the 'Jobs' section as
+long as the topic aligns with the main focus of this site. Users posting obvious spam
+will be immediately suspended or banned. Moderators will try to remove offensive
+content in a timely fashion but if you find something offensive please notify webmaster@bioconductor.org.
 Post not relating to *Bioconductor* content will generally be removed by moderators.
 
-You can also make an anonymous or non-anonymous report via the following link: https://tinyurl.com/bioccomplaint. 
-It is a free-form text box that will be forwarded to the Code of Conduct Committee. 
-Alternatively you can email the Code of Conduct Committee (code-of-conduct@bioconductor.org). 
-If you are uncomfortable reporting to the Code of Conduct committee as a group, you can contact 
+You can also make an anonymous or non-anonymous report via the following link: https://tinyurl.com/bioccomplaint.
+It is a free-form text box that will be forwarded to the Code of Conduct Committee.
+Alternatively you can email the Code of Conduct Committee (code-of-conduct@bioconductor.org).
+If you are uncomfortable reporting to the Code of Conduct committee as a group, you can contact
 any individual committee member via email or a direct message on the community-bioc Slack channel.
 
 <div style="text-align: right"> [ <a href="#top">Back to top</a> ] </div>
@@ -146,8 +146,8 @@ following:
   * Include the output of `sessionInfo()`.
   * Provide minimal code necessary to try and reproduce the issue. StackOverflow has suggestions for making a [reproducible example](https://stackoverflow.com/help/minimal-reproducible-example).
 
-Please make also sure to phrase your questions, answers and comments in a welcoming, 
-supportive, collegial, and harassment-free way, in line with the  
+Please make also sure to phrase your questions, answers and comments in a welcoming,
+supportive, collegial, and harassment-free way, in line with the
 [Bioconductor project-wide code of conduct](http://bioconductor.org/about/code-of-conduct/).
 
 <a name="p2"></a>
@@ -378,13 +378,13 @@ Font styling:
    -  `b`, `i`,`img`, `strong`, `strike`, `em`, `underline`
    - `sub`, `sup`, `img`
    - `h1` , `h2`, `h3`, `h4`
-   
+
 Content layouts:
    - `div`, `span`, `br`,`p`, `hr`
-   
+
 Code render
-   - `code`, `pre` 
-   
+   - `code`, `pre`
+
 Tables
    -`table`, `thead`, `tr`, `th`, `td`, `tbody`
 
@@ -394,7 +394,7 @@ Allowed styles:
    - `font-weight`
    - `background-color`
    - `width height`
-   
+
 # Other
 
 Can't find what your looking for? Consider opening an issue on the
