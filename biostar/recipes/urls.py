@@ -67,11 +67,10 @@ recipes_patterns = [
     path(r'ajax/move/', ajax.ajax_move, name='ajax_move'),
 
     path(r'recipe/delete/<str:uid>/', views.recipe_delete, name='recipe_delete'),
-    path(r'recipe/code/download/<str:uid>/', views.recipe_code_download, name='recipe_download'),
+    path(r'recipe/code/download/<str:uid>/<str:fname>', views.recipe_code_download, name='recipe_download'),
     path(r'recipe/create/<str:uid>/', views.recipe_create, name='recipe_create'),
 
     # File listings
-
     re_path(r'^file/list/(?P<path>.+)$', views.import_files, name='file_list'),
     path(r'root/list/', views.import_files, name='root_list'),
     # Actions
@@ -87,9 +86,9 @@ recipes_patterns = [
 
     # Api calls
     path(r'api/list/', api.api_list, name='api_list'),
-    path(r'api/project/<str:uid>/', api.project_api, name='project_api'),
-    path(r'api/recipe/<str:uid>/', api.recipe_api, name='recipe_api'),
-    path(r'api/data/<str:uid>/', api.data_api, name='data_api'),
+    path(r'api/project/', api.project_api, name='project_api'),
+    path(r'api/recipe/', api.recipe_api, name='recipe_api'),
+    path(r'api/data/', api.data_api, name='data_api'),
 
     # Plugins
     path(r'render/plugin/', ajax.render_plugins, name='render_plugins'),
