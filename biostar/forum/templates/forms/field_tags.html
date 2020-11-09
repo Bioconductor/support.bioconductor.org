@@ -7,16 +7,14 @@
 
     {% endif %}
 
-{#  Chand this using ajax when keystroke is done #}
     <select multiple="multiple" data-value="{{ form_field.id_for_label }}" class="ui search selection dropdown tags">
 
-    <option value="">Search tags</option>
+    {% for value, is_selected in dropdown_options %}
 
-        {% for value, is_selected in dropdown_options %}
+        <option value="{{ value }}" {% if is_selected %}selected="selected"{% endif %}>
+        {{ value }}
+        </option>
 
-            <option value="{{ value }}" {% if is_selected %}selected="selected"{% endif %}>
-            {{ value }}
-            </option>
+    {% endfor %}
 
-        {% endfor %}
     </select>
