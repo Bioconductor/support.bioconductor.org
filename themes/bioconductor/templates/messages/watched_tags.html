@@ -7,7 +7,7 @@
 
 {% block html %}
 
-    Activity on a tag you are wathcing on <a href="http://{{ domain }}">Bioconductor support</a>
+    Activity on a tag you are watching on <a href="http://{{ domain }}">Bioconductor support</a>
     <p>
         User <a href="http://{{ domain }}{{ post.author.profile.get_absolute_url }}">{{ post.author.profile.name }}</a> wrote
         <a href="http://{{ domain }}{{ post.get_absolute_url }}">{{ post.title }}</a>:
@@ -31,7 +31,7 @@
 
     User {{ post.author.profile.name }} wrote {{ post.title }}:
 
-    {{ post.content }}
+    {{ post.content|safe }}
 
     You may visit http://{{ domain }}{{ post.get_absolute_url }}
 
