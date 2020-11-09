@@ -7,7 +7,7 @@
 
 {% block html %}
 
-    Activity on a post you are following on <a href="http://{{ domain }}">Bioconductor support</a>
+    Activity on a tag you are wathcing on <a href="http://{{ domain }}">Bioconductor support</a>
     <p>
         User <a href="http://{{ domain }}{{ post.author.profile.get_absolute_url }}">{{ post.author.profile.name }}</a> wrote
         <a href="http://{{ domain }}{{ post.get_absolute_url }}">{{ post.title }}</a>:
@@ -21,13 +21,13 @@
         You may visit http://{{ domain }}{{ post.get_absolute_url }}
     </p>
 
-    <p>The Bioconductor Team</p>
+    <p>The Biconductor Team</p>
 
 {% endblock %}
 
 {% block text %}
 
-    Activity on a post you are following on {{ domain }}
+    Activity on a tag you are watching on {{ domain }}
 
     User {{ post.author.profile.name }} wrote {{ post.title }}:
 
@@ -35,7 +35,7 @@
 
     You may visit http://{{ domain }}{{ post.get_absolute_url }}
 
-    The Bioconductor Team
+    The Biconductor Team
 
 
 {% endblock %}
