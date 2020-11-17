@@ -77,8 +77,7 @@
             </div>
         {% endif %}
 
-        <p class="muted">Tips: CTRL+ENTER to submit the form. ESC to cancel. Double-click to edit post. Markdown
-            accepted.</p>
+        <p class="muted">Tips: CTRL+ENTER to submit the form. ESC to cancel. Markdown accepted.</p>
 
         {# Preview segment #}
         <div class="ui preview segment">{{ html |safe }}</div>
@@ -122,6 +121,14 @@
                 cancel_inplace()
             }
         });
+        $('#inplace #wmd-input').keyup(function (event) {
+
+        // Submit form with CTRL-ENTER
+        if (event.ctrlKey && (event.keyCode === 13 || event.keyCode === 10)) {
+            var save = $('#inplace').find('.save, .create');
+            save.click();
+        }
+    });
 
     })
 </script>
