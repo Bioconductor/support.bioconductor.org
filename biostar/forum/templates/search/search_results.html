@@ -25,7 +25,6 @@
                     <a class="item" href="{% url 'post_search' %}{% relative_url 'edit' 'sort' params %}">
                         <i class="{% activate_check_mark sort 'eidt' %}"></i>Rank
                     </a>
-
                     <a class="item" href="{% url 'post_search' %}{% relative_url 'creation' 'sort' params %}">
                         <i class="{% activate_check_mark sort 'creation' %}"></i>Creation
                     </a>
@@ -51,11 +50,7 @@
                         {% if result.type != question_flag %}
                             <span class="ui title header">{{ result.type_display }}:</span>
                         {% endif %}
-                        <a href="
-
-
-
-                                {% url 'post_view' result.uid %}{% if not result.is_toplevel %}#{{ result.uid }}{% endif %}"
+                        <a href="{% url 'post_view' result.uid %}{% if not result.is_toplevel %}#{{ result.uid }}{% endif %}"
                            class="ui mini blue title header trigger-highlight">{{ result.title|truncatechars:150 }}
                         </a>
                     </div>
@@ -92,7 +87,7 @@
                                 <a href="{% url "user_profile"  result.lastedit_user_uid %}">
                                     {{ result.lastedit_user }}
                                 </a>
-                                {% user_icon user='' is_moderator=result.lastedit_user_is_moderator score=post.lastedit_user_score %}
+                                {% user_icon user='' is_moderator=result.lastedit_user_is_moderator score=result.lastedit_user_score %}
 
                             {% endif %}
 
