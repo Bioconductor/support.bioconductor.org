@@ -8,7 +8,7 @@ from django.conf import settings
 from datetime import datetime, timedelta
 
 from django.http import HttpResponse
-
+from django.views.decorators.csrf import csrf_exempt
 from biostar.accounts.models import Profile, User
 from . import util
 from .models import Post, Vote, Subscription, PostView
@@ -20,6 +20,13 @@ logger = logging.getLogger("engine")
 def api_error(msg="Api Error"):
     return {'error': msg}
 
+LIMIT_MAP = dict(
+    all=0,
+    today=1,
+    week=7,
+    month=30,
+    year=365
+)
 
 def stat_file(date, data=None, load=False, dump=False):
 
@@ -282,4 +289,42 @@ def vote_details(request, uid):
         'type_id': vote.type,
         'date': util.datetime_to_iso(vote.date),
     }
+    return data
+
+
+@csrf_exempt
+@json_response
+def tags_list(request):
+    """
+    Given a file of tags, return the post count for each.
+    """
+    # Get a file with all the tags.
+    tags = request.FILES.get('tags')
+
+    # options : today, month, week, year, all
+    # TODO: change to months.
+    time_range = request.GET.get('trange', 'year')
+    days = LIMIT_MAP.get(time_range, 0)
+
+    delta = util.now() - timedelta(days=days)
+    query = Post.objects.filter(lastedit_date__gt=delta)
+
+    # Iterate over tags and collect counts.
+    lines = tags.readlines()
+
+    data = {}
+
+    for line in lines:
+        tag = line.decode().lower().strip()
+        if not tag:
+            continue
+
+        posts = query.filter(tags__name=tag)
+        answer_count = posts.filter(type=Post.ANSWER).count()
+        comment_count = posts.filter(type=Post.COMMENT).count()
+        total = posts.count()
+
+        val = dict(total=total, answer_count=answer_count, comment_count=comment_count)
+        data.setdefault(tag, {}).update(val)
+
     return data

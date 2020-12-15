@@ -1,7 +1,7 @@
 import toml
 import json
 import logging
-import os
+import os, urllib
 import base64
 from functools import wraps
 from django.conf import settings
@@ -19,6 +19,7 @@ RATELIMIT_KEY = settings.RATELIMIT_KEY
 
 # Maximum file size to be sent and received via api.
 MAX_FILE_SIZE = 100
+
 
 class api_error_wrapper:
     """
@@ -52,115 +53,214 @@ def change_image(obj, file_object=None):
     return obj.image.path
 
 
-def tabular_list(qs=None):
-    output = []
+def encode_image(img):
+    """
+    Base 64 encoding of an image field that may be missing.
+    """
+
+    # The image is not filled in.
+    if not img:
+        return ''
+
+    # The path is incorrect.
+    if not os.path.isfile(img.path):
+        return ''
+
+    # The binary representation of the data.
+    data = open(img.path, 'rb').read()
+
+    # Convert image to base64 ASCII string
+    text = base64.b64encode(data).decode("ascii")
+
+    return text
+
+
+def encode_project(project, show_image=False):
+    recipes = dict()
+    store = dict(
+        uid=project.uid,
+        name=project.name,
+        text=project.text,
+        date=str(project.date),
+        privacy=project.privacy,
+        image=encode_image(project.image) if show_image else '',
+        recipes=recipes,
+    )
+    return store
+
+
+def encode_recipe(recipe, show_image=False):
+    store = dict(
+        uid=recipe.uid,
+        name=recipe.name,
+        text=recipe.text,
+        date=str(recipe.date),
+        json=recipe.json_data,
+        code=recipe.template,
+        image=encode_image(recipe.image) if show_image else '',
+    )
+    return store
+
+
+def json_list(qs=None, show_image=False):
+    output = {}
     projects = qs or Project.objects.all()
     for project in projects:
+        proj_dict = encode_project(project, show_image=show_image)
         for recipe in project.analysis_set.all():
-            line = f"{project.uid}\t{project.name}\t{recipe.uid}\t{recipe.name}\t{project.get_privacy_display()}"
-            output.append(line)
+            proj_dict['recipes'][recipe.uid] = encode_recipe(recipe, show_image=show_image)
+        output[project.uid] = proj_dict
 
-    return "\n".join(output)
+    text = json.dumps(output, indent=4)
+    return text
 
 
 @api_error_wrapper(['GET'])
 @ratelimit(key=RATELIMIT_KEY, rate='20/m')
 def api_list(request):
-
     # Get the token and user
     token = auth.get_token(request=request)
+
     user = User.objects.filter(profile__token=token).first()
 
-    # Get the project list corresponding to this user
-    # returns public projects if user is None.
+    # Get the project list corresponding to this user returns public projects if user is None.
     projects = auth.get_project_list(user=user)
 
     # Format the payload.
-    payload = tabular_list(qs=projects)
+    payload = json_list(qs=projects)
 
-    return HttpResponse(content=payload, content_type="text/plain")
+    return HttpResponse(content=payload, content_type="text/json")
 
 
 @api_error_wrapper(['GET', 'POST'])
-@token_access(klass=Project, allow_create=True)
+#@token_access(klass=Project)
 @csrf_exempt
 @ratelimit(key='ip', rate='30/m')
-def project_api(request):
+def project_api(request, uid):
     """
-    GET request : return project name, text, and image as a TOML file.
-    POST request : change project name, text, and image given a TOML file.
+    GET request : return project name, text, and image as a JSON file.
+    POST request : change project name, text, and image given a JSON file.
     """
-    # Get the object uid
-    uid = request.GET.get('uid', request.POST.get('uid', ''))
 
-    project = Project.objects.filter(uid=uid).first()
-
-    token = auth.get_token(request=request)
-    # Find the target user.
-    user = User.objects.filter(profile__token=token).first()
+    qs = Project.objects.filter(uid=uid)
 
     # Get the json data with project info
-    target = project.api_data if project else {}
+    payload = json_list(qs, show_image=True)
 
-    if request.method == "POST":
-        # Fetch data from the
-        stream = request.FILES.get("data")
+    return HttpResponse(content=payload, content_type="text/json")
 
-        if stream:
-            # Update or create a project using data.
-            target = auth.update_project(obj=project, stream=stream,
-                                         user=user, uid=uid,
-                                         create=True, save=True)
 
-    payload = json.dumps(target)
+class Bunch(object):
+    uid = ""
+    name = ""
+    text = ""
+    date = ""
+    privacy = ""
+    image = ""
+    recipes = []
+    json = ""
+    code = ""
+    is_project = False
 
-    return HttpResponse(content=payload, content_type="text/plain")
+    def __init__(self, **kwargs):
+        self.__dict__.update(kwargs)
+
+
+def parse_json(json_dict):
+
+    uid = json_dict.get('uid')
+    name = json_dict.get('name')
+    text = json_dict.get('text')
+    date = json_dict.get('date')
+    privacy = json_dict.get('privacy')
+    image = json_dict.get('image')
+    recipes = json_dict.get('recipes')
+    json_text = json_dict.get('json')
+    code = json_dict.get('code')
+    is_project = recipes is not None
+    data = Bunch(uid=uid, name=name, text=text, date=date, privacy=privacy,
+                 image=image, recipes=recipes, is_project=is_project,
+                 code=code, json=json_text)
+    return data
+
+
+def upload_recipe(obj, project, user=None, create=False):
+
+    recipe = Analysis.objects.filter(uid=obj.uid).first()
+
+    if not recipe and create:
+        recipe = auth.create_analysis(project=project, user=user, uid=obj.uid,
+                                      json_text=obj.json, template=obj.code)
+
+    elif not recipe:
+        return
+
+    recipe.uid = obj.uid
+    recipe.name = obj.name
+    recipe.text = obj.text
+    recipe.date = obj.date
+    recipe.image = obj.image
+    recipe.json_text = toml.dumps(obj.json)
+    recipe.template = obj.code
+
+    recipe.save()
+
+    return
+
+
+def upload_project(obj, user=None, create=False):
+
+    # Check if this is a recipe or project
+
+    project = Project.objects.filter(uid=obj.uid).first()
+
+    if not project and create:
+        project = auth.create_project(user=user, uid=obj.uid,
+                                      name=obj.name,
+                                      text=obj.text)
+    elif not project:
+        return
+
+    project.uid = obj.uid
+    project.name = obj.name
+    project.text = obj.text
+    project.date = obj.date
+    project.privacy = obj.privacy
+    project.image = obj.image
+
+    project.save()
+    for recipe, vals in obj.recipes.items():
+        data = parse_json(vals)
+        upload_recipe(data, project=project, user=user)
+
+    return
+
 
 
 @api_error_wrapper(['GET', 'POST'])
-@token_access(klass=Analysis, allow_create=True)
+@token_access(klass=Project)
 @csrf_exempt
-@ratelimit(key='ip', rate='20/m')
-def recipe_api(request):
-    """
-    GET request : return recipe json, template and image as a TOML string.
-    POST request : change recipe json, template, and image given a TOML string.
-    """
+@ratelimit(key='ip', rate='30/m')
+def api_upload(request):
 
-    # Get the object uid
-    uid = request.GET.get('uid', request.POST.get('uid', ''))
-    # Get the project uid in case of creation.
-    pid = request.GET.get('pid', request.POST.get('pid', ''))
+    fstream = request.FILES.get("data", "")
 
-    recipe = Analysis.objects.filter(uid=uid).first()
+    # Explicitly pass a 'create' flag
+    create = request.POST.get('create', False)
 
-    # Resolve the project from recipe or 'pid'
-    project = recipe.project if recipe else None
-    project = project or Project.objects.filter(uid=pid).first()
+    # Get a list of projects or a single one to update.
+    json_obj = json.load(fstream)
 
-    target = recipe.api_data if recipe else {}
+    for key, item in json_obj.items():
+        # Filter for uid if exists.
+        data = parse_json(item)
 
-    if not project:
-        return HttpResponse(content="Project does not exist.", content_type="text/plain")
+        if data.is_project:
+            upload_project(data, create=create)
+        else:
+            upload_recipe(data, create=create)
 
-    token = auth.get_token(request=request)
-    # Find the target user.
-    user = User.objects.filter(profile__token=token).first()
-
-    # Replace source with target with valid POST request.
-    if request.method == "POST":
-        # Fetch data
-        stream = request.FILES.get("data")
-        if stream:
-            # Update or create a recipe using data.
-            target = auth.update_recipe(obj=recipe, stream=stream,
-                                        save=True, create=True,
-                                        user=user, uid=uid,
-                                        project=project)
-    # Get the payload as a toml file.
-    payload = json.dumps(target)
-
-    return HttpResponse(content=payload, content_type="text/plain")
+    return
 
 
 @api_error_wrapper(['GET', 'POST'])
@@ -204,4 +304,3 @@ def data_api(request):
 
 def job_api(request, uid):
     return
-

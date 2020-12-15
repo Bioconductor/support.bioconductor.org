@@ -11,10 +11,8 @@
 
 {% endif %}
 
-<link href="{% static 'autocomplete/at.who.css' %}" rel="stylesheet">
 <link href="{% static 'pagedown.css' %}" type="text/css" media="all" rel="stylesheet">
 <link href="{% static 'pagedown/demo/browser/demo.css' %}" type="text/css" media="all" rel="stylesheet">
-
 
 <script type="text/javascript" src="{% static 'pagedown/Markdown.Converter.js' %}"></script>
 <script type="text/javascript" src="{% static 'pagedown-extra/pagedown/Markdown.Converter.js' %}"></script>
@@ -25,8 +23,6 @@
 
 
 <script src="{% static 'markdown-it.js' %}"></script>
-<script src="{% static 'autocomplete/at.who.js' %}"></script>
-<script src="{% static 'autocomplete/caret.js' %}"></script>
 <script src="{% static 'effects.js' %}{% randparam %}"></script>
 <script src="{% static 'inplace.js' %}{% randparam %}"></script>
 
@@ -87,9 +83,16 @@
             <a class="ui green button {% if new %}create{% else %}save{% endif %}">
                 <i class="check icon"></i>Save
             </a>
+
             <a class="ui button cancel">
                 <i class="undo icon"></i>Cancel
             </a>
+
+          {% if post and not new%}
+           <a class="ui right floated button delete">
+                <i class="trash icon"></i>Delete
+            </a>
+        {% endif %}
         </div>
 
     </form>
@@ -108,13 +111,16 @@
             highligh_preview(form, text);
         });
         // initialize autocomplete
-        var users = "{{ users_str }}".split(',');
-        autocomplete_users(users);
+        autocomplete_users();
         // initialize tags dropdown.
         tags_dropdown();
 
         $(this).on('click', '#inplace .cancel', function () {
             cancel_inplace()
+        });
+        $(this).on('click', '#inplace .delete', function () {
+            var post = $(this).closest('.post');
+            delete_post(post)
         });
         $(this).on('keyup', 'body', function (event) {
             if (event.keyCode === 27) {

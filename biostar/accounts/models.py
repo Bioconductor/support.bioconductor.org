@@ -1,8 +1,9 @@
 import uuid
 import os
 from datetime import datetime, timedelta
-
+from taggit.managers import TaggableManager
 import mistune
+from taggit.models import Tag
 from django.conf import settings
 from django.shortcuts import reverse
 from django.contrib.auth.models import User
@@ -34,8 +35,13 @@ class ProfileManager(models.Manager):
 
 
 def image_path(instance, filename):
+
+    # Assign personal uid our own file name.
+
+    fname = util.get_uuid(32)
+
     # Name the data by the filename.
-    imgpath = os.path.join(settings.PAGEDOWN_IMAGE_UPLOAD_PATH, filename)
+    imgpath = os.path.join(settings.PAGEDOWN_IMAGE_UPLOAD_PATH, fname)
 
     return imgpath
 
@@ -111,7 +117,7 @@ class Profile(models.Model):
     location = models.CharField(default="", max_length=255, blank=True, db_index=True)
 
     # User provided website.
-    website = models.URLField(default="", max_length=255, blank=True)
+    website = models.URLField(default="", max_length=256, blank=True)
 
     # Google scholar ID
     scholar = models.CharField(default="", max_length=255, blank=True)
@@ -128,13 +134,16 @@ class Profile(models.Model):
     # The tag value is the canonical form of the post's tags
     watched_tags = models.CharField(max_length=MAX_TEXT_LEN, default="", blank=True)
 
+    # Tag objects
+    watched = TaggableManager()
+
     # Description provided by the user html.
     text = models.TextField(default="No profile information", null=True, max_length=MAX_TEXT_LEN, blank=True)
 
     # The html version of the user information.
     html = models.TextField(null=True, max_length=MAX_TEXT_LEN, blank=True)
 
-    # The state of the user email verfication.
+    # The state of the user email verification.
     email_verified = models.BooleanField(default=False)
 
     # Automatic notification
@@ -170,6 +179,14 @@ class Profile(models.Model):
         if self.user.is_staff or self.user.is_superuser:
             return self.max_upload_size * 100
         return self.max_upload_size
+
+    def parse_tags(self):
+        return [tag.lower() for tag in self.watched_tags.split(",") if tag]
+
+    def add_watched(self):
+        tags = [Tag.objects.get_or_create(name=name)[0] for name in self.parse_tags()]
+        self.watched.remove()
+        self.watched.add(*tags)
 
     def set_upload_size(self):
         """
