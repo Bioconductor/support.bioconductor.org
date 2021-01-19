@@ -90,6 +90,8 @@ DEFAULT_APPS = [
     'compressor',
     'taggit',
     'snowpenguin.django.recaptcha2',
+    'django_celery_results',
+    'django_celery_beat'
 ]
 
 # Enabled apps.
@@ -160,6 +162,7 @@ AUTH_PASSWORD_VALIDATORS = [
 # Database settings.
 # https://docs.djangoproject.com/en/1.11/ref/settings/#databases
 DATABASE_DIR = os.path.join(BASE_DIR, 'export', 'db')
+
 os.makedirs(DATABASE_DIR, exist_ok=True)
 
 DATABASE_NAME = os.environ.setdefault("DATABASE_NAME", "database.db")
@@ -198,7 +201,7 @@ RATELIMIT_KEY = "header:x-real-ip"
 
 
 # Configure language detection
-LANGUAGE_DETECTION = ['en']
+#LANGUAGE_DETECTION = ['en']
 
 # The static URL start.
 STATIC_URL = '/static/'
@@ -229,6 +232,10 @@ STATICFILES_FINDERS = [
 
 # Apply default logger setting.
 LOGGER_NAME = "biostar"
+
+
+TASKS_CELERY = False
+TASKS_UWSGI = False
 
 # The email delivery engine.
 #EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'

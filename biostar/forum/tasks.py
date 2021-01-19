@@ -1,8 +1,10 @@
-
+import functools
 from biostar.accounts.tasks import create_messages
 from biostar.emailer.tasks import send_email
+from django.conf import settings
 import time
-from biostar.utils.decorators import spool, timer
+from biostar.utils.decorators import spooler, threaded
+from biostar.celery import celery_task
 
 
 from django.db.models import Q
@@ -11,13 +13,19 @@ from django.db.models import Q
 #
 # https://github.com/unbit/uwsgi/issues/1369
 
+if settings.TASKS_CELERY:
+    task = celery_task
+elif settings.TASKS_UWSGI:
+    task = spooler
+else:
+    task = threaded
 
 
 def message(msg, level=0):
     print(f"{msg}")
 
 
-@spool(pass_arguments=True)
+@task
 def spam_scoring(post):
     """
     Score the spam with a slight delay.
@@ -47,7 +55,7 @@ def tpatt(tag):
     return patt
 
 
-@spool(pass_arguments=True)
+@task
 def notify_watched_tags(post, extra_context):
     """
     Notify users watching a given tag found in post.
@@ -73,7 +81,7 @@ def notify_watched_tags(post, extra_context):
     return
 
 
-@spool(pass_arguments=True)
+@task
 def update_spam_index(post):
     """
     Update spam index with this post.
@@ -93,7 +101,7 @@ def update_spam_index(post):
         message(exc)
 
 
-@spool(pass_arguments=True)
+@task
 def created_post(pid):
     message(f"Created post={pid}")
     pass
@@ -136,7 +144,19 @@ def created_post(pid):
 #
 #     return
 
-@spool(pass_arguments=True)
+# Set in the settings.
+# if celery:
+#     task = app.task
+# elif uwsgi:
+#     task = spool
+# else:
+#     task = threaded
+#
+#@spool(pass_arguments=True)
+# Do this with celery.
+#@shared_task
+#@task
+@task
 def create_user_awards(user_id):
 
     from biostar.accounts.models import User
@@ -144,7 +164,6 @@ def create_user_awards(user_id):
     from biostar.forum.awards import ALL_AWARDS
 
     user = User.objects.filter(id=user_id).first()
-
     # debugging
     # Award.objects.all().delete()
 
@@ -165,10 +184,10 @@ def create_user_awards(user_id):
             # Create an award for each target.
             Award.objects.create(user=user, badge=badge, date=date, post=post)
 
-            message("award %s created for %s" % (badge.name, user.email))
+            message(f"award {badge.name} created for {user.email}")
 
 
-@spool(pass_arguments=True)
+@task
 def mailing_list(users, post, extra_context={}):
     """
     Generate notification for mailing list users.
@@ -189,7 +208,7 @@ def mailing_list(users, post, extra_context={}):
                mass=True)
 
 
-@spool(pass_arguments=True)
+@task
 def notify_followers(subs, author, extra_context={}):
     """
     Generate notification to users subscribed to a post, excluding author, a message/email.

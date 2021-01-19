@@ -75,7 +75,7 @@ ALLOWED_ATTRIBUTES = {
     'table': ['border', 'cellpadding', 'cellspacing'],
 }
 
-ALLOWED_TAGS = ['p', 'div', 'br', 'code', 'pre', 'h1', 'h2' 'h3' 'h4', 'hr', 'span', 's',
+ALLOWED_TAGS = ['p', 'div', 'br', 'code', 'pre', 'h1', 'h2', 'h3', 'h4', 'hr', 'span', 's',
                 'sub', 'sup', 'b', 'i', 'img', 'strong', 'strike', 'em', 'underline',
                 'super', 'table', 'thead', 'tr', 'th', 'td', 'tbody']
 
@@ -422,7 +422,6 @@ def parse(text, post=None, clean=True, escape=True, allow_rewrite=False):
     markdown = mistune.Markdown(hard_wrap=True, renderer=renderer, inline=inline)
 
     html = safe(markdown, text=text)
-
     # Bleach clean the html.
     if clean:
         html = safe(bleach.clean, text=html,

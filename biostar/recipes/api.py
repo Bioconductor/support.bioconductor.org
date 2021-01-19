@@ -75,40 +75,54 @@ def encode_image(img):
     return text
 
 
-def encode_project(project, show_image=False):
+def encode_project(project, show_image=False, user=None):
     recipes = dict()
     store = dict(
         uid=project.uid,
         name=project.name,
+        owner=project.owner.uid,
+        owner_name=project.owner.profile.name,
         text=project.text,
         date=str(project.date),
         privacy=project.privacy,
         image=encode_image(project.image) if show_image else '',
         recipes=recipes,
     )
+    if user and user.is_admin:
+        store['owner_email'] = project.owner.email
+        store['owner_first_name'] = project.owner.first_name
+        store['owner_text'] = project.owner.profile.text
+
     return store
 
 
-def encode_recipe(recipe, show_image=False):
+def encode_recipe(recipe, show_image=False, user=None):
+
     store = dict(
         uid=recipe.uid,
         name=recipe.name,
+        owner=recipe.owner.uid,
+        owner_name=recipe.owner.profile.name,
         text=recipe.text,
         date=str(recipe.date),
-        json=recipe.json_data,
+        json=toml.dumps(recipe.json_data),
         code=recipe.template,
         image=encode_image(recipe.image) if show_image else '',
     )
+
+    if user and user.is_admin:
+        store['owner_email'] = recipe.owner.email
+
     return store
 
 
-def json_list(qs=None, show_image=False):
+def json_list(qs=None, show_image=False, user=None):
     output = {}
     projects = qs or Project.objects.all()
     for project in projects:
-        proj_dict = encode_project(project, show_image=show_image)
+        proj_dict = encode_project(project, show_image=show_image, user=user)
         for recipe in project.analysis_set.all():
-            proj_dict['recipes'][recipe.uid] = encode_recipe(recipe, show_image=show_image)
+            proj_dict['recipes'][recipe.uid] = encode_recipe(recipe, show_image=show_image, user=user)
         output[project.uid] = proj_dict
 
     text = json.dumps(output, indent=4)
@@ -120,14 +134,19 @@ def json_list(qs=None, show_image=False):
 def api_list(request):
     # Get the token and user
     token = auth.get_token(request=request)
+    show_all = bool(request.GET.get('show', 0))
 
     user = User.objects.filter(profile__token=token).first()
 
-    # Get the project list corresponding to this user returns public projects if user is None.
-    projects = auth.get_project_list(user=user)
+    # Admins can get all projects
+    if user.is_admin and show_all:
+        projects = Project.objects.filter(deleted=False).all()
+    else:
+        # Get the project list corresponding to this user returns public projects if user is None.
+        projects = auth.get_project_list(user=user)
 
     # Format the payload.
-    payload = json_list(qs=projects)
+    payload = json_list(qs=projects, user=user)
 
     return HttpResponse(content=payload, content_type="text/json")
 
@@ -146,6 +165,26 @@ def project_api(request, uid):
 
     # Get the json data with project info
     payload = json_list(qs, show_image=True)
+
+    return HttpResponse(content=payload, content_type="text/json")
+
+
+@api_error_wrapper(['GET', 'POST'])
+#@token_access(klass=Project)
+@csrf_exempt
+@ratelimit(key='ip', rate='30/m')
+def recipe_api(request, uid):
+    """
+    GET request : return project name, text, and image as a JSON file.
+    POST request : change project name, text, and image given a JSON file.
+    """
+
+    recipe = Analysis.objects.filter(uid=uid).first()
+    if not recipe:
+        return HttpResponse(content="Recipe does not exist", status=404)
+
+    # Get the json data with project info
+    payload = encode_recipe(recipe, show_image=True)
 
     return HttpResponse(content=payload, content_type="text/json")
 
@@ -234,7 +273,6 @@ def upload_project(obj, user=None, create=False):
         upload_recipe(data, project=project, user=user)
 
     return
-
 
 
 @api_error_wrapper(['GET', 'POST'])
