@@ -3,9 +3,44 @@
 {% load forum_tags %}
 
 {% block head %}
-    <script async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js" id="MathJax-script"></script>
+
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
     <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
+    <script async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js" id="MathJax-script"></script>
     <link disabled rel="stylesheet" href="//cdn.jsdelivr.net/gh/highlightjs/cdn-release@9.18.0/build/styles/default.min.css">
     <script async src="//cdn.jsdelivr.net/gh/highlightjs/cdn-release@9.18.0/build/highlight.min.js"></script>
+{% endblock %}
+
+{% block js %}
+    <script type="text/javascript" src="{% static 'pagedown/Markdown.Converter.js' %}"></script>
+    <script type="text/javascript" src="{% static 'pagedown-extra/pagedown/Markdown.Converter.js' %}"></script>
+    <script type="text/javascript" src="{% static 'pagedown/Markdown.Sanitizer.js' %}"></script>
+    <script type="text/javascript" src="{% static 'pagedown/Markdown.Editor.js' %}"></script>
+    <script type="text/javascript" src="{% static 'pagedown-extra/Markdown.Extra.js' %}"></script>
+    <script type="text/javascript" src="{% static 'pagedown_init.js' %}"></script>
+    <script src="{% static 'markdown-it.js' %}"></script>
+    <script src="{% static 'autocomplete/at.who.js' %}"></script>
+    <script src="{% static 'autocomplete/caret.js' %}"></script>
+    <script src="{% static 'autocomplete/tribute.js' %}"></script>
+{% endblock %}
+
+
+{% block css %}
+    <link rel="stylesheet" href="{% static 'autocomplete/tribute.css' %}" />
+    <link rel="stylesheet" href="{% static 'autocomplete/at.who.css' %}" />
+    <link href="{% static 'pagedown.css' %}" type="text/css" media="all" rel="stylesheet">
+    <link href="{% static 'pagedown/demo/browser/demo.css' %}" type="text/css" media="all" rel="stylesheet">
+{% endblock %}
+
+
+{% block jsfile %}
+    <script src="{% static 'semantic.min.js' %}"></script>
+    <script src="{% static 'prism.js' %}"></script>
+    <script src="{% static 'setup.js' %}{% randparam %}"></script>
+    <script src="{% static 'forum.js' %}{% randparam %}"></script>
+
+    <script src="{% static 'effects.js' %}{% randparam %}"></script>
+    <script src="{% static 'inplace.js' %}{% randparam %}"></script>
+    {% block extrajs %}
+    {% endblock %}
 {% endblock %}
