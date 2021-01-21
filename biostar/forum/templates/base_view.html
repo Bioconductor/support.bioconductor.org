@@ -18,6 +18,10 @@
     <script type="text/javascript" src="{% static 'pagedown/Markdown.Editor.js' %}"></script>
     <script type="text/javascript" src="{% static 'pagedown-extra/Markdown.Extra.js' %}"></script>
     <script type="text/javascript" src="{% static 'pagedown_init.js' %}"></script>
+    <script src="{% static 'markdown-it.js' %}"></script>
+    <script src="{% static 'autocomplete/at.who.js' %}"></script>
+    <script src="{% static 'autocomplete/caret.js' %}"></script>
+    <script src="{% static 'autocomplete/tribute.js' %}"></script>
 {% endblock %}
 
 
@@ -35,10 +39,6 @@
     <script src="{% static 'setup.js' %}{% randparam %}"></script>
     <script src="{% static 'forum.js' %}{% randparam %}"></script>
 
-    <script src="{% static 'markdown-it.js' %}"></script>
-    <script src="{% static 'autocomplete/at.who.js' %}"></script>
-    <script src="{% static 'autocomplete/caret.js' %}"></script>
-    <script src="{% static 'autocomplete/tribute.js' %}"></script>
     <script src="{% static 'effects.js' %}{% randparam %}"></script>
     <script src="{% static 'inplace.js' %}{% randparam %}"></script>
     {% block extrajs %}
