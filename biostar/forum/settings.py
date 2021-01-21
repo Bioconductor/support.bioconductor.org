@@ -83,7 +83,6 @@ SEARCH_LIMIT = 20
 
 INIT_PLANET = False
 
-
 TASKS_CELERY = False
 TASKS_UWSGI = True
 
