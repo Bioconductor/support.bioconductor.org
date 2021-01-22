@@ -13,7 +13,7 @@
 
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
     {# Set the favicon #}
     {% block favicon %}
         <link rel="icon" href="{% static 'forum_favicon.ico' %}" type="image/x-icon"/>
@@ -58,6 +58,7 @@
     {#  CSS compression. #}
     {% compress css inline %}
         <link href="{% static 'semantic.min.css' %}" rel="stylesheet">
+        {#  Preload key requests #}
         <link href="{% static 'prism.css' %}" rel="stylesheet">
         <link href="{% static 'forum.css' %}{% randparam %}" rel="stylesheet">
         {% block cssfile %}
@@ -67,7 +68,10 @@
 
     {# Javascript compression. #}
     {% compress js inline %}
-
+        <script async src="{% static 'forum.js' %}{% randparam %}"></script>
+        <script async src="{% static 'semantic.min.js' %}"></script>
+        <script async src="{% static 'setup.js' %}{% randparam %}"></script>
+        <script async src="{% static 'prism.js' %}"></script>
         {% block jsfile %}
         {% endblock %}
     {% endcompress %}
@@ -119,4 +123,3 @@
 
 </body>
 </html>
-
