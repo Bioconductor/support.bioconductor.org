@@ -61,7 +61,10 @@ class ajax_error_wrapper:
             if request.user.is_authenticated and request.user.profile.is_spammer:
                 return ajax_error('You must be logged in.')
 
-            return func(request, *args, **kwargs)
+            try:
+                return func(request, *args, **kwargs)
+            except Exception as exc:
+                return ajax_error(f'Error: {exc}')
 
         return _ajax_view
 
@@ -83,7 +86,7 @@ def user_image(request, username):
     return redirect(gravatar_url)
 
 
-@ratelimit(key=RATELIMIT_KEY, rate='500/h')
+@ratelimit(key=RATELIMIT_KEY, rate='100/h')
 @ratelimit(key=RATELIMIT_KEY, rate='25/m')
 @ajax_error_wrapper(method="POST")
 def ajax_vote(request):
@@ -254,51 +257,6 @@ def validate_recaptcha(token):
         return True, ""
 
     return False, "Invalid reCAPTCHA. Please try again."
-
-
-def release_suspect(request, uid):
-    """
-    Mark post as not spam and release from score.
-    """
-    post = Post.objects.filter(uid=uid).first()
-
-    if not post:
-        return ajax_error(msg='Post does not exist.')
-
-    if not request.user.profile.is_moderator:
-        return ajax_error(msg="You need to be a moderator to preform that action.")
-
-    # Bump the score by one is the user does not get quarantined again.
-    # basically tells the system the user has gained antibodies.
-    if post.author.profile.low_rep:
-        post.author.profile.bump_over_threshold()
-
-    Post.objects.filter(uid=uid).update(spam=Post.NOT_SPAM)
-
-    return ajax_success(msg="Released from the quarantine.")
-
-
-@ajax_error_wrapper(method="GET", login_required=True)
-def report_spam(request, post_uid):
-    """
-    Report this user as a spammer.
-    """
-
-    post = Post.objects.filter(uid=post_uid).first()
-
-    if not post:
-        return ajax_error(msg='Post does not exist.')
-
-    if not request.user.profile.is_moderator:
-        return ajax_error(msg="You need to be a moderator to preform that action.")
-
-    # Can not report your self or a moderator as spam.
-    if request.user == post.author or post.author.profile.is_moderator:
-        return ajax_error(msg='Invalid action.')
-
-    auth.Moderate(post=post, action=const.REPORT_SPAM, user=request.user)
-
-    return ajax_success(msg="Reported user as a spammer.")
 
 
 def validate_toplevel_fields(fields={}):

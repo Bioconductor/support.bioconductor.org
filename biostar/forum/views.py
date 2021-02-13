@@ -19,8 +19,10 @@ from taggit.models import Tag
 from biostar.accounts.models import Profile
 from biostar.forum import forms, auth, tasks, util, search
 from biostar.forum.const import *
-from biostar.forum.models import Post, Vote, Badge, Subscription
+from biostar.forum.models import Post, Vote, Badge, Subscription, Award
 from biostar.utils.decorators import is_moderator
+
+from biostar.accounts.auth import db_logger
 
 User = get_user_model()
 
@@ -104,15 +106,18 @@ def get_posts(user, topic="", tag="", order="", limit=None):
         query = query.filter(type=post_type)
 
     elif topic == SHOW_SPAM:
-        query = query.filter(Q(spam=Post.SPAM) | Q(spam=Post.SUSPECT))
+        query = query.filter(Q(spam=Post.SPAM))
     elif topic == OPEN:
         query = query.filter(type=Post.QUESTION, answer_count=0)
     elif topic == BOOKMARKS and user.is_authenticated:
-        query = query.filter(votes__author=user, votes__type=Vote.BOOKMARK)
+        query = Post.objects.valid_posts(u=user, votes__author=user, votes__type=Vote.BOOKMARK)
     elif topic == FOLLOWING and user.is_authenticated:
         query = query.filter(subs__user=user).exclude(subs__type=Subscription.NO_MESSAGES)
     elif topic == MYPOSTS and user.is_authenticated:
-        query = query.filter(author=user)
+        # Show users all of there posts ( deleted, spam, or quarantined )
+        query = Post.objects.filter(author=user)
+        #query = query.filter(author=user)
+
     elif topic == MYVOTES and user.is_authenticated:
         query = query.filter(votes__post__author=user)
     elif topic == MYTAGS and user.is_authenticated:
@@ -197,16 +202,25 @@ def pages(request, fname):
 @is_moderator
 def mark_spam(request, uid):
     """
-    Mark post as a
+    Mark post as spam.
     """
+
+    # Trigger post
     post = Post.objects.filter(uid=uid).first()
-    if not post:
-        messages.error(request, "Post does noe exist.")
+
+    # A restore parameter sent toggles spam off.
+    state = False if request.GET.get("restore") else True
+
+    # Apply the toggle.
+    if post:
+        auth.toggle_spam(request, post, state=state)
+    else:
+        messages.error(request, "Post does not seem to exist")
+
+    if state:
         return redirect('/')
-
-    auth.Moderate(post=post, action=REPORT_SPAM, user=request.user)
-
-    return redirect('/')
+    else:
+        return redirect('/?type=spam')
 
 
 @is_moderator
@@ -216,7 +230,7 @@ def release_quar(request, uid):
     """
     post = Post.objects.filter(uid=uid).first()
     if not post:
-        messages.error(request, "Post does noe exist.")
+        messages.error(request, "Post does not exist.")
         return redirect('/')
 
     # Bump the score by one is the user does not get quarantined again.
@@ -405,19 +419,24 @@ def community_list(request):
 
 
 def badge_list(request):
-    badges = Badge.objects.annotate(count=Count("award"))
+    badges = Badge.objects.annotate(count=Count("award")).order_by('-count')
     context = dict(badges=badges)
     return render(request, "badge_list.html", context=context)
 
 
 def badge_view(request, uid):
     badge = Badge.objects.filter(uid=uid).annotate(count=Count("award")).first()
+    target = request.GET.get('user')
+
+    user = User.objects.filter(profile__uid=target).first()
 
     if not badge:
         messages.error(request, f"Badge with id={uid} does not exist.")
         return redirect(reverse("badge_list"))
 
-    awards = badge.award_set.valid_awards().order_by("-pk")[:100]
+    awards = badge.award_set.all().order_by("-pk")
+    if user:
+        awards = awards.filter(user=user)
 
     awards = awards.prefetch_related("user", "user__profile", "post", "post__root")
     context = dict(awards=awards, badge=badge)
@@ -511,10 +530,9 @@ def post_moderate(request, uid):
         if form.is_valid():
             action = form.cleaned_data.get('action')
             comment = form.cleaned_data.get('comment')
-            mod = auth.Moderate(user=user, post=post, action=action, comment=comment)
-            messages.success(request=request, message=mod.msg)
-            auth.log_action(user=user, log_text=f"{mod.msg} ; post.uid={post.uid}.")
-            return redirect(mod.url)
+            url, msg = auth.moderate(user=user, post=post, action=action, comment=comment)
+            messages.success(request=request, message=msg)
+            return redirect(url)
         else:
             errors = ','.join([err for err in form.non_field_errors()])
             messages.error(request, errors)

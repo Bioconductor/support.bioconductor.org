@@ -193,6 +193,17 @@ def traffic(request):
 
 
 @json_response
+def api_tag(request, tag):
+    """
+    Return list of post uids that have a tag.
+    """
+    posts = Post.objects.filter(tags__name=tag.lower()).values_list('uid', flat=True)
+    posts = list(posts)
+
+    return posts
+
+
+@json_response
 def user_email(request, email):
     user = User.objects.filter(email__iexact=email.lower())
     if user.exists():
@@ -320,8 +331,9 @@ def tags_list(request):
             continue
 
         posts = query.filter(tags__name=tag)
-        answer_count = Post.objects.filter(root__in=posts, type=Post.ANSWER).count()
-        comment_count = Post.objects.filter(root__in=posts, type=Post.COMMENT).count()
+
+        answer_count = Post.objects.filter(uid__in=posts, answer_count__gt=1).count()
+        comment_count = Post.objects.filter(uid__in=posts, comment_count__gt=1).count()
         total = posts.count()
 
         val = dict(total=total, answer_count=answer_count, comment_count=comment_count)

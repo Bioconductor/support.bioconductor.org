@@ -8,15 +8,17 @@
         <div class="ui message"> <i class="search icon"></i>Searching for tags containing: <b>{{ query }}</b></div>
     {% endif %}
 
+    {% block top-page %}
     <div class="center-text">
         {% pages objs=tags %}
     </div>
+        {% endblock %}
 
     <div class="ui five column tags grid">
         {% for tag in tags %}
             <div class="column">
                 <div class="item">
-                    <a class="ui small label listing tags-list" href="{% url 'post_list' %}?tag={{ tag }}">
+                    <a class="ptag" href="{% url 'post_list' %}?tag={{ tag }}">
                         {{ tag }}
                     </a>
                     <i class="ui tags icon"></i> {{ tag.nitems }}
@@ -25,8 +27,10 @@
         {% endfor %}
     </div>
 
+    {% block bottom-page %}
     <div class="center-text">
         {% pages objs=tags %}
     </div>
+    {% endblock %}
 
 {% endblock %}

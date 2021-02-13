@@ -3,6 +3,7 @@ from django.dispatch import receiver
 
 from biostar.accounts.models import Profile, User
 from biostar.accounts import util, tasks
+from django.template.defaultfilters import slugify
 
 
 @receiver(post_save, sender=User)
@@ -10,6 +11,7 @@ def create_profile(sender, instance, created, raw, using, **kwargs):
     if created:
         # Set the username to a simpler form.
         username = f"{instance.first_name}-{instance.pk}" if instance.first_name else f'user-{instance.pk}'
+        username = slugify(username)
         if User.objects.filter(username=username).exclude(id=instance.pk).exists():
             username = util.get_uuid(6)
 
@@ -18,7 +20,8 @@ def create_profile(sender, instance, created, raw, using, **kwargs):
         # Make sure staff users are also moderators.
         role = Profile.MANAGER if instance.is_staff else Profile.READER
         Profile.objects.using(using).create(user=instance, uid=username, name=instance.first_name, role=role)
-        tasks.create_messages.spool(rec_list=[instance], template="messages/welcome.md")
+        user_ids = [instance.pk]
+        tasks.create_messages.spool(user_ids=user_ids, template="messages/welcome.md")
 
     # Recompute watched tags
     instance.profile.add_watched()

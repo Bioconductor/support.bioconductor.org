@@ -1,8 +1,9 @@
 import functools
+import random
 from biostar.accounts.tasks import create_messages
 from biostar.emailer.tasks import send_email
 from django.conf import settings
-import time
+import time, random
 from biostar.utils.decorators import spooler, threaded
 from biostar.celery import celery_task
 
@@ -15,10 +16,10 @@ from django.db.models import Q
 
 if settings.TASKS_CELERY:
     task = celery_task
-elif settings.TASKS_UWSGI:
-    task = spooler
-else:
+elif settings.MULTI_THREAD:
     task = threaded
+else:
+    task = spooler
 
 
 def message(msg, level=0):
@@ -26,44 +27,48 @@ def message(msg, level=0):
 
 
 @task
-def spam_scoring(post):
+def classify_spam(uid):
     """
     Score the spam with a slight delay.
     """
     from biostar.forum import spam
+    from biostar.forum.models import Post
+
+    post = Post.objects.filter(uid=uid).first()
 
     # Give spammers the illusion of success with a slight delay
     time.sleep(1)
 
+    # Non spam posts are left alone.
+    if post.not_spam:
+        return
+
     try:
         # Give this post a spam score and quarantine it if necessary.
-        spam.score(post=post)
+        spam.score(uid=uid)
+
+        # Add this post to the spam index.
+        spam.add_spam(uid=uid)
+
     except Exception as exc:
         message(exc)
 
 
-def tpatt(tag):
-    """
-    Return pattern matching a tag found in comma separated string.
-    (?i)             : case-insensitive flag
-    ^{tag}\\s*,      : matches beginning
-    ,\\s*{tag}\\s*,  : matches middle
-    ,\\s*{tag}$      : matches end
-    ^{tag}[^\\w+]    : matches single entry ( no commas )
-    """
-    patt = fr"(?i)(^{tag}\s*,|,\s*{tag}\s*,|,\s*{tag}$|^{tag}$)"
-    return patt
-
-
 @task
-def notify_watched_tags(post, extra_context):
+def notify_watched_tags(uid, extra_context):
     """
     Notify users watching a given tag found in post.
     """
     from biostar.accounts.models import User
+    from biostar.forum.models import Post
     from django.conf import settings
 
-    users = [User.objects.filter(profile__watched_tags__iregex=tpatt(tag.name)).distinct()
+    post = Post.objects.filter(uid=uid).first()
+
+    # Update template context with post
+    extra_context.update(dict(post=post))
+
+    users = [User.objects.filter(profile__watched__name__iexact=tag.name).distinct()
              for tag in post.root.tags.all()]
 
     # Flatten nested users queryset and get email.
@@ -78,20 +83,20 @@ def notify_watched_tags(post, extra_context):
                from_email=from_email,
                mass=True)
 
-    return
-
 
 @task
-def update_spam_index(post):
+def update_spam_index(uid):
     """
     Update spam index with this post.
     """
-    from biostar.forum import spam
+    from biostar.forum import spam, models
+
+    post = models.Post.objects.filter(uid=uid).first()
 
     # Index posts explicitly marked as SPAM or NOT_SPAM
     # indexing SPAM increases true positives.
     # indexing NOT_SPAM decreases false positives.
-    if not (post.is_spam or post.not_spam):
+    if post.spam == models.Post.DEFAULT:
         return
 
     # Update the spam index with most recent spam posts
@@ -162,17 +167,22 @@ def create_user_awards(user_id):
     from biostar.accounts.models import User
     from biostar.forum.models import Award, Badge, Post
     from biostar.forum.awards import ALL_AWARDS
+    from biostar.forum import util
 
     user = User.objects.filter(id=user_id).first()
     # debugging
     # Award.objects.all().delete()
 
+    # Collect valid targets
+    valid = []
+
     for award in ALL_AWARDS:
+
         # Valid award targets the user has earned
         targets = award.validate(user)
-
         for target in targets:
-            date = user.profile.last_login
+
+            date = util.now()
             post = target if isinstance(target, Post) else None
             badge = Badge.objects.filter(name=award.name).first()
 
@@ -181,22 +191,36 @@ def create_user_awards(user_id):
             if post and already_awarded:
                 continue
 
-            # Create an award for each target.
-            Award.objects.create(user=user, badge=badge, date=date, post=post)
+            valid.append((user, badge, date, post))
 
-            message(f"award {badge.name} created for {user.email}")
+    # Pick random awards to give to user
+    random.shuffle(valid)
+
+    valid = valid[:settings.MAX_AWARDS]
+
+    for target in valid:
+        user, badge, date, post = target
+
+        # Create an award for each target.
+        Award.objects.create(user=user, badge=badge, date=date, post=post)
+        message(f"award {badge.name} created for {user.email}")
 
 
 @task
-def mailing_list(users, post, extra_context={}):
+def mailing_list(emails, uid, extra_context={}):
     """
     Generate notification for mailing list users.
     """
     from django.conf import settings
+    from biostar.forum.models import Post
+
+    post = Post.objects.filter(uid=uid).first()
+
+    # Update template context with post
+    extra_context.update(dict(post=post))
 
     # Prepare the templates and emails
     email_template = "messages/mailing_list.html"
-    emails = [user.email for user in users]
     author = post.author.profile.name
     from_email = settings.DEFAULT_NOREPLY_EMAIL
 
@@ -209,12 +233,13 @@ def mailing_list(users, post, extra_context={}):
 
 
 @task
-def notify_followers(subs, author, extra_context={}):
+def notify_followers(sub_ids, author_id, uid, extra_context={}):
     """
     Generate notification to users subscribed to a post, excluding author, a message/email.
     """
     from biostar.forum.models import Subscription
-    from biostar.accounts.models import Profile
+    from biostar.accounts.models import Profile, User
+    from biostar.forum.models import Post
     from django.conf import settings
 
     # Template used to send local messages
@@ -224,14 +249,23 @@ def notify_followers(subs, author, extra_context={}):
     email_template = "messages/subscription_email.html"
 
     # Does not have subscriptions.
-    if not subs:
+    if not sub_ids:
         return
 
+    post = Post.objects.filter(uid=uid).first()
+    author = User.objects.filter(id=author_id).first()
+    subs = Subscription.objects.filter(uid__in=sub_ids)
+
     users = [sub.user for sub in subs]
+    user_ids = [u.pk for u in users]
+
+    # Update template context with post
+    extra_context.update(dict(post=post))
+
     # Every subscribed user gets local messages with any subscription type.
     create_messages(template=local_template,
                     extra_context=extra_context,
-                    rec_list=users,
+                    user_ids=user_ids,
                     sender=author)
 
     # Select users with email subscriptions.

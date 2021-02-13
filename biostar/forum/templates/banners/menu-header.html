@@ -1,11 +1,13 @@
 {% load forum_tags %}
 {% load static %}
 
+
 <div class="ui labeled icon top attached evenly divided menu" id="menu-header" user-id="{{ request.user.id }}">
+
 
     {% block headimg %}
         <div class="header item" id="logo">
-            <a href="/"><img class="ui image" src="{% static "images/logo.svg" %}"></a>
+            <a href="/"><img width="200px" src="{% static "images/logo6.svg" %}"></a>
         </div>
     {% endblock %}
 
@@ -35,12 +37,18 @@
             </a>
 
             {% if request.user.profile.is_moderator %}
-                <a class="item {% activate tab 'spam' %} " href="{% url 'post_list' %}?type=spam">
-                    <i class="bug icon"></i> Spam
+                <a class="item {% activate tab 'activity' %} " href="{% url 'view_logs' %}">
+                    <i class="info circle icon"></i> Activity
                 </a>
             {% endif %}
         </div>
     </div>
+
+    {% if request.user.profile.is_moderator %}
+        <a class="item {% activate tab 'spam' %} " href="{% url 'post_list' %}?type=spam">
+            <i class="bug icon"></i> Spam
+        </a>
+    {% endif %}
 
     <a class="item {% activate tab "planet" %} " href="{% url 'blog_list' %}">
         <i class="rss icon"></i> Planet
@@ -56,9 +64,9 @@
     <div class="right menu">
 
         {% if user.is_authenticated %}
+
             <a class="item  {% activate tab "profile" %}" href="{% url 'user_profile' user.profile.uid %}">
                 <i class="{% user_icon_css user %}"></i> {{ user.profile.name }}
-                &bull; {{ user.profile.get_score|bignum }}
             </a>
 
             <a class="item  {% activate tab "logout" %}" href="{% url 'logout' %}" id="new-post">

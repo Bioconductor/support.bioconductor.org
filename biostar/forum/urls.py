@@ -47,9 +47,6 @@ forum_patterns = [
     path('inplace/form/', ajax.inplace_form, name='inplace_form'),
     path('ajax/user/image/<str:username>/', ajax.user_image, name='user_image'),
     path('similar/posts/<str:uid>/', ajax.similar_posts, name='similar_posts'),
-    path('ajax/report/spam/<str:post_uid>/', ajax.report_spam, name='report_spam'),
-    path('release/<str:uid>/', ajax.release_suspect, name='release_suspect'),
-    #path('most/recent/users/', ajax.most_recent_users, name='most_recent_users'),
 
     path('moderate/<str:uid>/', views.post_moderate, name="post_moderate"),
 
@@ -63,6 +60,7 @@ forum_patterns = [
     # Api calls
     path(r'api/traffic/', api.traffic, name='api_traffic'),
     path(r'api/user/<str:uid>/', api.user_details, name='api_user'),
+    path(r'api/tag/<str:tag>/', api.api_tag, name='api_tag'),
     path(r'api/tags/list/', api.tags_list, name='api_tags_list'),
     path(r'api/post/<str:uid>/', api.post_details, name='api_post'),
     path(r'api/vote/<str:uid>/', api.vote_details, name='api_vote'),

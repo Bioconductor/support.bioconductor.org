@@ -2,8 +2,7 @@
 {% load static %}
 
 
-<div class="ui labeled icon attached pointing menu" id="menu-header" user-id="{{ request.user.id }}">
-<div class="ui inverted dimmer"></div>
+<div class="ui labeled icon attached pointing menu" id="menu-header">
     {% block headimg %}
         <div class="header item" id="logo">
             <a href="https://support.bioconductor.org/"><img class="ui image"  src="{% static "transparent-logo.png" %}"></a>

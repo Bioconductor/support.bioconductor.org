@@ -18,6 +18,7 @@
     {% block favicon %}
         <link rel="icon" href="{% static 'forum_favicon.ico' %}" type="image/x-icon"/>
     {% endblock %}
+
     {# Optional block header content. #}
     {% block head %}
     {% endblock %}
@@ -39,6 +40,7 @@
         </script>
 
     {% endif %}
+
     {# <script async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js" id="MathJax-script"></script>#}
 
     <script>
@@ -56,10 +58,10 @@
     {#% recaptcha_init %#}
 
     {#  CSS compression. #}
-    {% compress css inline %}
+    {% compress css %}
+
         <link href="{% static 'semantic.min.css' %}" rel="stylesheet">
         {#  Preload key requests #}
-        <link href="{% static 'prism.css' %}" rel="stylesheet">
         <link href="{% static 'forum.css' %}{% randparam %}" rel="stylesheet">
         {% block cssfile %}
         {% endblock %}
@@ -67,14 +69,12 @@
     {% endcompress %}
 
     {# Javascript compression. #}
-    {% compress js inline %}
+    {% compress js %}
 
         {% block jsfile %}
         {% endblock %}
 
     {% endcompress %}
-
-
 
     {# Optional css header content. #}
     {% block css %}
@@ -82,13 +82,14 @@
 
     {# Optional javascaript header content. #}
     {% block js %}
-
     {% endblock %}
 
 </head>
+
+
 <body>
 
-<div class="ui inverted container widen">
+<div class="ui inverted container main">
 
     {% include 'banners/top-banner.html' %}
 
@@ -114,11 +115,16 @@
         </div>
     {% endblock %}
 
-
     {% block footer %}
         {% include 'widgets/footer.html' %}
     {% endblock %}
+
+    {% include 'widgets/page_end.html' %}
+
 </div>
 
+
 </body>
+
+
 </html>
