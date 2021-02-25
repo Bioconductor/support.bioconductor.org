@@ -1,6 +1,5 @@
 {% load static %}
 {% load compress %}
-{% load recaptcha2 %}
 {% load forum_tags %}
 {% load accounts_tags %}
 
@@ -46,16 +45,14 @@
     <script>
         MathJax = {
             tex: {
-                inlineMath: [['$', '$'], ['\\(', '\\)']]
+                // \$ fixes php conflicting with Mathjax delimiter
+                inlineMath: [['\$', '\$'], ['\\(', '\\)']]
             },
             svg: {
                 fontCache: 'global'
             }
         };
     </script>
-
-    {# Load recaptcha #}
-    {#% recaptcha_init %#}
 
     {#  CSS compression. #}
     {% compress css %}

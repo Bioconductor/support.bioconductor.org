@@ -137,7 +137,7 @@ def message_list(request):
 
     counts = request.session.get(COUNT_DATA_KEY, {})
     # Set message count back to 0
-    counts["message_count"] = 0
+    counts[MESSAGE_COUNT] = 0
     request.session.update(dict(counts=counts))
 
     context = dict(tab="messages", all_messages=msgs)
@@ -152,7 +152,7 @@ def user_profile(request, uid):
         return redirect("/")
 
     # Get the active tab, defaults to project
-    active = request.GET.get("active", "posts")
+    active = request.GET.get("active", "profile")
 
     # Apply filter to what is shown.
     show = request.GET.get('show', '')
@@ -163,7 +163,9 @@ def user_profile(request, uid):
     can_moderate = is_mod and request.user != profile.user
     show_info = is_mod or (profile.is_valid and not profile.low_rep)
 
-    context = dict(target=profile.user, active=active, debugging=settings.DEBUG, show_info=show_info,
+    allow_debug = request.user.is_superuser and settings.DEBUG_USERS
+
+    context = dict(target=profile.user, active=active, allow_debug=allow_debug, show_info=show_info,
                    const_post=POSTS, const_project=PROJECT, can_moderate=can_moderate, show=show,
                    tab="profile")
 
@@ -223,6 +225,7 @@ def image_upload_view(request):
     form = forms.ImageUploadForm(data=request.POST, files=request.FILES, user=user)
     if form.is_valid():
         url = form.save()
+        db_logger(user=user, action=Log.CREATE, text=f'uploaded an image: {url}')
         return JsonResponse({'success': True, 'url': url})
 
     return JsonResponse({'success': False, 'error': form.errors})
@@ -236,7 +239,7 @@ def debug_user(request):
 
     if not settings.DEBUG_USERS:
         messages.error(request, "Can only use when in debug mode.")
-        redirect("/")
+        return redirect("/")
 
     target = request.GET.get("uid", "")
     profile = Profile.objects.filter(uid=target).first()
@@ -247,7 +250,6 @@ def debug_user(request):
 
     user = profile.user
     login(request, user, backend="django.contrib.auth.backends.ModelBackend")
-    messages.success(request, "Login successful!")
 
     logger.info(f"""uid={request.user.profile.uid} impersonated 
                     uid={profile.uid}.""")
@@ -301,7 +303,6 @@ def user_login(request):
     return render(request, "accounts/login.html", context=context)
 
 
-
 @login_required
 def view_logs(request):
     LIMIT = 300
@@ -316,6 +317,7 @@ def view_logs(request):
     context = dict(logs=logs)
 
     return render(request, "accounts/view_logs.html", context=context)
+
 
 @login_required
 def send_email_verify(request):

@@ -17,9 +17,9 @@ from django.core.cache import cache
 from django.core.paginator import Paginator
 from django.shortcuts import reverse
 from biostar.accounts.models import Profile
-from . import util
+from . import util, awards
 from .const import *
-from .models import Post, Vote, PostView, Subscription
+from .models import Post, Vote, PostView, Subscription, Award, Badge
 from django.utils.safestring import mark_safe
 
 
@@ -126,58 +126,6 @@ def walk_down_thread(parent, collect=set()):
     return collect
 
 
-def old_to_new_sync(base_url, count=1):
-    """
-    Sync the old biostars with the current new version one post at a time.
-    count - Number of posts to sync. Equal to the number of requests sent to the server.
-    """
-
-    # Get the most recent post without a 'p' in the uid.
-    # This is most up to date we need to start syncing.
-
-    most_recent = Post.objects.exclude(uid__contains="p").order_by('-pk').only('id')
-
-    # Get end point url for the next post
-
-    next = most_recent.id + 1
-
-    relative_url = reverse('api_post', kwargs=dict(id=next))
-    endpoint = urlparse.urljoin(base_url, relative_url)
-    # Send get
-    response = request.urlopen(endpoint)
-    print(response)
-    1/0
-
-    json_data = json.dumps(response.data)
-
-    # Load the response into dict then batch create the posts.
-
-    return
-
-
-def batch_old_to_new_sync(base_url, batch_size=10):
-    """
-    Batch sync the old biostars with the current new version.
-    """
-
-    # Get the most recent post without a 'p' in the uid.
-    # This is most up to date we need to start syncing.
-
-    most_recent = Post.objects.exclude(uid__contains="p").order_by('-lastedit_date').only('lastedit_date')
-
-    # Get end point url  and construct url
-    params = {'start_date': most_recent.lastedit_date.iso, 'batch_size': batch_size}
-    params = urlparse.urlencode(params)
-    endpoint = urlparse.urljoin(base_url, reverse('api_batch'))
-    endpoint = f"{endpoint}?{params}"
-
-    response = ''
-
-    # Load the response into dict then batch create the posts.
-
-    return
-
-
 def create_post_from_json(**json_data):
 
     post_uid = json_data['id']
@@ -268,7 +216,7 @@ def create_subscription(post, user, sub_type=None, update=False):
         subs.delete()
         Subscription.objects.create(post=post.root, user=user, type=sub_type)
 
-    # Recompute post subscription.
+    # Recompute subscription count
     subs_count = Subscription.objects.filter(post=post.root).exclude(type=Subscription.NO_MESSAGES).count()
 
     # Update root subscription counts.
@@ -338,6 +286,32 @@ def post_tree(user, root):
     answers = [p for p in thread if p.type == Post.ANSWER]
 
     return root, comment_tree, answers, thread
+
+
+def valid_awards(user):
+    """
+    Return list of valid awards for a given user
+    """
+
+    valid = []
+    for award in awards.ALL_AWARDS:
+
+        # Valid award targets the user has earned
+        targets = award.validate(user)
+        for target in targets:
+
+            date = util.now()
+            post = target if isinstance(target, Post) else None
+            badge = Badge.objects.filter(name=award.name).first()
+
+            # Do not award a post multiple times.
+            already_awarded = Award.objects.filter(user=user, badge=badge, post=post).exists()
+            if post and already_awarded:
+                continue
+
+            valid.append((user, badge, date, post))
+
+    return valid
 
 
 def update_post_views(post, request, minutes=settings.POST_VIEW_MINUTES):
@@ -439,7 +413,7 @@ def delete_post(post, user):
         # Deleted posts can be un=deleted by re-opening them.
         Post.objects.filter(uid=post.uid).update(status=Post.DELETED)
         url = post.root.get_absolute_url()
-        msg = f"Deleted post: {post.title}"
+        msg = f"Deleted post: {post_link(post)}"
         post.recompute_scores()
         post.root.recompute_scores()
         return url, msg
@@ -452,38 +426,40 @@ def delete_post(post, user):
         post.root.recompute_scores()
 
     # Remove post from the database with no trace.
-    msg = f"Removed post: {post.title}"
+    msg = f"Removed post: {post_link(post)}"
     post.delete()
 
     return url, msg
 
 
-def move(post, **kwargs):
-    Post.objects.filter(uid=post.uid).update(type=Post.ANSWER)
-    msg = f"Moved post={post.uid} to answer. "
-    url = post.get_absolute_url()
-    return url, msg
-
-
-def open(post, **kwargs):
+def open(request, post, **kwargs):
 
     if post.is_spam and post.author.profile.low_rep:
         post.author.profile.bump_over_threshold()
 
+    user = request.user
     Post.objects.filter(uid=post.uid).update(status=Post.OPEN, spam=Post.NOT_SPAM)
     post.recompute_scores()
+
     post.root.recompute_scores()
-    msg = f"Opened post: {post.title}"
+    msg = f"Opened post: {post_link(post)}"
     url = post.get_absolute_url()
-    return url, msg
+    messages.info(request, mark_safe(msg))
+    db_logger(user=user, text=f"{msg} ; post.uid={post.uid}.")
+    return url
 
 
-def bump(post, **kwargs):
+def bump(request, post, **kwargs):
     now = util.now()
+    user = request.user
+
     Post.objects.filter(uid=post.uid).update(lastedit_date=now, rank=now.timestamp())
-    msg = "Post bumped"
+    msg = f"Post bumped : {post_link(post)}"
     url = post.get_absolute_url()
-    return url, msg
+    messages.info(request, mark_safe(msg))
+    db_logger(user=user, text=f"{msg} ; post.uid={post.uid}.")
+
+    return url
 
 
 def post_link(post):
@@ -491,12 +467,14 @@ def post_link(post):
     link = f'<a href="{url}">{post.title} ({post.uid})</a>'
     return link
 
+
 def user_link(user):
     url = user.get_absolute_url()
     link = f'<a href="{url}">{user.name} ({user.uid})</a>'
     return link
 
-def toggle_spam(request, post, state=True):
+
+def toggle_spam(request, post, **kwargs):
     """
     Toggles spam status on post based on a status
     """
@@ -505,9 +483,10 @@ def toggle_spam(request, post, state=True):
     user = request.user
 
     # The spam status set by the toggle.
-    spam = Post.SPAM if state else Post.NOT_SPAM
+    spam = Post.NOT_SPAM if post.is_spam else Post.SPAM
 
     # Update the object bypassing the signals.
+    post.spam = spam
     Post.objects.filter(id=post.id).update(spam=spam)
 
     # Moderators may only be suspended by admins (TODO).
@@ -516,11 +495,11 @@ def toggle_spam(request, post, state=True):
         return
 
     # Set the state for the user.
-    post.author.profile.state = Profile.SUSPENDED if state else Profile.NEW
+    post.author.profile.state = Profile.SUSPENDED if post.is_spam else Profile.NEW
     post.author.profile.save()
 
     # Generate logging messages.
-    if state:
+    if post.is_spam:
         text = f'marked post {post_link(post)} as spam'
     else:
         text = f'restored post {post_link(post)} from spam'
@@ -528,44 +507,34 @@ def toggle_spam(request, post, state=True):
     # Submit the log into the database.
     db_logger(user=user, text=text)
     messages.info(request, mark_safe(text))
-
-
-
-def spam(post, **kwargs):
-    """
-    Suspend the user.
-    """
-    if not post.author.profile.is_moderator:
-        post.author.profile.state = Profile.SUSPENDED
-        post.author.profile.save()
-
-    post.spam = Post.SPAM
-    post.save()
-    msg = "Reported Spam"
     url = post.get_absolute_url()
-    return url, msg
+    return url
 
 
-def close(post, user, comment, **kwargs):
+def close(request, post, comment, **kwargs):
     """
     Close this post and provide a rationale for closing as well.
     """
-
+    user = request.user
     Post.objects.filter(uid=post.uid).update(status=Post.CLOSED)
     # Generate a rationale post on why this post is closed.
     context = dict(comment=comment)
     rationale = mod_rationale(post=post, user=user,
                               template="messages/closed.md",
                               extra_context=context)
-    msg = f"Closed {post.title}. "
+    msg = f"Closed {post_link(post)}. "
     url = rationale.get_absolute_url()
-    return url, msg
+    messages.info(request, mark_safe(msg))
+    db_logger(user=user, text=f"{msg} ; post.uid={post.uid}.")
+    return url
 
 
-def duplicated(post, user, comment, **kwargs):
+def duplicated(request, post, comment, **kwargs):
 
     # Generate a rationale post on why this post is a duplicate.
     Post.objects.filter(uid=post.uid).update(status=Post.CLOSED)
+    user = request.user
+
     dupes = comment.split("\n")[:5]
     dupes = list(filter(lambda d: len(d), dupes))
     context = dict(dupes=dupes, comment=comment)
@@ -573,24 +542,29 @@ def duplicated(post, user, comment, **kwargs):
                               template="messages/duplicate_posts.md",
                               extra_context=context)
     url = rationale.get_absolute_url()
-    msg = "Marked duplicated post as off topic."
-    return url, msg
+    msg = f"Closed duplicated post {post_link(post)}."
+    messages.info(request, mark_safe(msg))
+    db_logger(user=user, text=f"{msg} ; post.uid={post.uid}.")
+    return url
 
 
-def delete(post, user, **kwargs):
+def delete(request, post, **kwargs):
     """
     Delete this post or complete remove it from the database.
     """
+    user = request.user
     url, msg = delete_post(post=post, user=user)
-    return url, msg
+    messages.info(request, mark_safe(msg))
+    db_logger(user=user, text=f"{msg} ; post.uid={post.uid}.")
+
+    return url
 
 
-def moderate(user, post, action, comment=""):
+def moderate(request, post, action, comment=""):
 
     # Bind an action to a function.
-    action_map = {REPORT_SPAM: spam,
+    action_map = {REPORT_SPAM: toggle_spam,
                   DUPLICATE: duplicated,
-                  MOVE_ANSWER: move,
                   BUMP_POST: bump,
                   OPEN_POST: open,
                   DELETE: delete,
@@ -598,11 +572,10 @@ def moderate(user, post, action, comment=""):
 
     if action in action_map:
         mod_func = action_map[action]
-        url, msg = mod_func(user=user, post=post, comment=comment)
-        db_logger(user=user, text=f"{msg} ; post.uid={post.uid}.")
+        url = mod_func(request=request, post=post, comment=comment)
     else:
         url = post.get_absolute_url()
         msg = "Unknown moderation action given."
         logger.error(msg)
 
-    return url, msg
+    return url
