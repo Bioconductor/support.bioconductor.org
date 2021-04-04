@@ -3,30 +3,20 @@ import inspect
 import functools
 from urllib.request import urlopen, Request
 from functools import partial
-import toml as hjson
+import json
 import mistune
 from django.conf import settings
 from django.template import loader
-from biostar.utils.decorators import spooler, threaded
-from biostar.celery import celery_task
+from biostar.utils.decorators import task
 
 #
 # Do not use logging in tasks! Deadlocking may occur!
 #
 # https://github.com/unbit/uwsgi/issues/1369
-
+#
 
 def message(msg, level=0):
     print(f"{msg}")
-
-
-if settings.TASKS_CELERY:
-    task = celery_task
-elif settings.MULTI_THREAD:
-    task = threaded
-else:
-    task = spooler
-
 
 @task
 def detect_location(ip, user_id):
@@ -41,7 +31,7 @@ def detect_location(ip, user_id):
         message(f"skip {msg}")
         return
 
-    message(f"execute {msg}")
+    message(f"{msg}")
 
     # Get the profile for the user
     profile = Profile.objects.filter(user__id=user_id).first()
@@ -54,12 +44,18 @@ def detect_location(ip, user_id):
     # Check and log location.
     if not profile.location:
         try:
-            url = f"http://api.hostip.info/get_json.php?ip={ip}"
+            url = f"http://ip-api.com/json/{ip}"
             message(url)
             message(f"{ip}, {profile.user}, {url}")
             req = Request(url=url, headers={'User-Agent': 'Mozilla/5.0'})
             resp = urlopen(req, timeout=3).read()
-            data = hjson.loads(resp)
+            data = json.loads(resp)
+
+            # Add the userid to the json
+            data['uid'] = user_id
+
+            # Log the return data.
+            message(data)
 
             city = get(data, "city")
             country = get(data, "country_name")
@@ -67,12 +63,13 @@ def detect_location(ip, user_id):
 
             msg = f"location result for \tid={user_id}\tip={ip}\tloc={location}"
             if location:
-                Profile.objects.filter(user=profile.user).update(location=location)
-                message(f"updated profile {msg}")
+                Profile.objects.filter(user__id=user_id).update(location=location)
+                message(f"updated profile: {msg}")
             else:
-                message(f"empty location {msg}")
+                message(f"empty location: {msg}")
 
         except Exception as exc:
+
             message(exc)
 
 
@@ -101,7 +98,6 @@ def create_messages(template, user_ids, sender=None, extra_context={}):
     tmpl = loader.get_template(template_name=template)
     context = dict(sender=sender)
     context.update(extra_context)
-
     body = tmpl.render(context)
     html = mistune.markdown(body, escape=False)
 

@@ -1,17 +1,4 @@
-import os
-import uuid
-import requests
 import logging
-import platform
-
-from biostar.settings import *
-
-#from biostar.recipes.settings import *
-
-#from themes.bioconductor.settings import *
-
-from biostar.forum.settings import *
-
 
 logger = logging.getLogger("biostar")
 
@@ -19,7 +6,7 @@ logger = logging.getLogger("biostar")
 DEBUG = True
 
 # Set your known secret key here.
-SECRET_KEY = str(uuid.uuid4())
+SECRET_KEY = "secretkey"
 
 # Admin users will be created automatically with DEFAULT_ADMIN_PASSWORD.
 ADMINS = [
@@ -29,13 +16,8 @@ ADMINS = [
 # Set the default admin password.
 DEFAULT_ADMIN_PASSWORD = SECRET_KEY
 
-# Attempts to detect hostname so that automatic deployment works.
-# It is best to set it with known data.
-try:
-    SITE_DOMAIN = requests.get('https://checkip.amazonaws.com').text.strip()
-except Exception as err:
-    SITE_DOMAIN = platform.node()
-
+# Set the site domain.
+SITE_DOMAIN = "foo.com"
 
 SITE_ID = 1
 HTTP_PORT = ''
@@ -59,6 +41,9 @@ DATABASES = {
 
 WSGI_APPLICATION = 'conf.run.site_wsgi.application'
 
+# Valid options; block, disable, threaded, uwsgi, celery.
+TASK_RUNNER = 'block'
+
 SESSION_COOKIE_SECURE = True
 
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
@@ -71,4 +56,4 @@ try:
 except ImportError as exc:
     logger.warn(f"No secrets module could be imported: {exc}")
 
-print(SITE_DOMAIN, "DOMAIN")
+logger.debug(f"SITE_DOMAIN: {SITE_DOMAIN}")

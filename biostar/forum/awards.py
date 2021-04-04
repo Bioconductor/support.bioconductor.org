@@ -2,7 +2,8 @@ import logging
 
 from django.utils.timezone import utc
 from datetime import datetime, timedelta
-
+from django.db.models import Count
+from django.db.models import Q
 from biostar.accounts.models import User
 from biostar.forum.models import Post, Vote, Badge, Award
 
@@ -30,16 +31,26 @@ class AwardDef(object):
         # No limit if left empty.
         self.max = max
 
-    def validate(self, *args, **kwargs):
+    def get_awards(self, user):
 
-        user = args[0]
         try:
-            value = self.fun(*args, **kwargs).order_by("pk")
+            value = self.fun(user).order_by("pk")
+
+            # Only return the ones that have one
         except Exception as exc:
             logger.error("validator error %s" % exc)
             return []
 
-        # Award user has won at this point.
+        if isinstance(value.first(), Post):
+            # Count awards user has for this post.
+            award_count = Count('award', filter=Q(author=user))
+
+            # Get posts/user combo that have not been awarded yet
+            value = value.annotate(award_count=award_count).filter(award_count=0)
+
+            return value
+
+        # Existing award user has won at this point.
         awarded = Award.objects.filter(badge__name=self.name, user=user)
 
         # Ensure users does not get over rewarded.
@@ -58,8 +69,8 @@ class AwardDef(object):
 # Award definitions
 AUTOBIO = AwardDef(
     name="Autobiographer",
-    desc="has more than 110 characters in the information field of the user's profile",
-    func=lambda user: wrap_qs(len(user.profile.text) > 110 and user.profile.score > 1, User, user.id),
+    desc="has more than 80 characters in the information field of the user's profile",
+    func=lambda user: wrap_qs(len(user.profile.text) > 80 and user.profile.score > 1, User, user.id),
     max=1,
     icon="bullhorn icon"
 )
@@ -69,7 +80,7 @@ GOOD_QUESTION = AwardDef(
     desc="asked a question that was upvoted at least 5 times",
     func=lambda user: Post.objects.filter(vote_count__gte=5, author=user, type=Post.QUESTION),
     max=1,
-    icon="question icon"
+    icon="question circle icon"
 )
 
 GOOD_ANSWER = AwardDef(
@@ -77,7 +88,7 @@ GOOD_ANSWER = AwardDef(
     desc="created an answer that was upvoted at least 5 times",
     func=lambda user: Post.objects.filter(vote_count__gt=5, author=user, type=Post.ANSWER),
     max=1,
-    icon="edit outline icon"
+    icon="book icon"
 )
 
 STUDENT = AwardDef(
@@ -85,7 +96,7 @@ STUDENT = AwardDef(
     desc="asked a question with at least 3 up-votes",
     func=lambda user: Post.objects.filter(vote_count__gt=2, author=user, type=Post.QUESTION),
     max=1,
-    icon="certificate icon"
+    icon="graduation cap icon"
 )
 
 TEACHER = AwardDef(
@@ -93,7 +104,7 @@ TEACHER = AwardDef(
     desc="created an answer with at least 3 up-votes",
     func=lambda user: Post.objects.filter(vote_count__gt=2, author=user, type=Post.ANSWER),
     max=1,
-    icon="smile outline icon"
+    icon="smile icon"
 )
 
 COMMENTATOR = AwardDef(
@@ -189,7 +200,7 @@ SCHOLAR = AwardDef(
     desc="created an answer that has been accepted",
     func=lambda user: Post.objects.filter(author=user, type=Post.ANSWER, accept_count__gt=0),
     max=1,
-    icon="check circle outline icon"
+    icon="university icon"
 )
 
 PROPHET = AwardDef(

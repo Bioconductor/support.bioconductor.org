@@ -3,8 +3,12 @@
 {% load humanize %}
 {% load cache %}
 
+{% block title %}
+    Bioinformatics Answers
+{% endblock %}
+
 {% block headtitle %}
-    Biostar Forum
+    Bioinformatics Answers
 {% endblock %}
 
 {% block body %}
@@ -21,15 +25,17 @@
 
     {% block listing %}
 
-        {% if topic %}
-            <div class="ui blue filter message">
-                Filtering for: <b>{{ topic }}</b> &bull;
-                <a href="{% url 'post_list' %}">
-                    reset <i class="undo small icon"></i>
-                </a>
-            </div>
-        {% endif %}
 
+    {% if tag %}
+
+        <div class="ui  filter message">
+
+            Filtering for tag: <span class="ptag">{{ tag }}</span> &bull;
+            <a href="{% url 'post_list' %}">
+                reset <i class="undo small icon"></i>
+            </a>
+        </div>
+    {% endif %}
 
         <div class="ui divided items">
             {% for post in posts %}
@@ -42,31 +48,18 @@
         </div>
     {% endblock %}
 
-
-
     <div class="ui page-bar segment">
         {% pages objs=posts %}
     </div>
-
 
 {% endblock %}
 
 {% block sidebar %}
 
-    {%  include "banners/insert-sidebar-top.html" %}
+    {% include "banners/insert-sidebar-top.html" %}
 
-    {% cache 60 sidebar sidebar_key %}
-
-        {% if tab == 'following' %}
-            {% custom_feed feed_type=tab objs=posts title='People you are following' %}
-        {% elif tab == 'bookmarks' %}
-            {% custom_feed feed_type=tab objs=posts title='People you have bookmarked' %}
-        {% else %}
-
-            {% default_feed user=request.user %}
-        {% endif %}
-
+    {% cache 600 "default" request.user.pk %}
+        {% default_feed user=request.user %}
     {% endcache %}
-
 
 {% endblock %}

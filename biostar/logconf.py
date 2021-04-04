@@ -1,23 +1,31 @@
 import os
+
 from django.core.cache import cache
-from django.core.servers import basehttp
+
 #
 # To see all log messages: export DJANGO_LOG_LEVEL=DEBUG
 #
-LOG_LEVEL = os.getenv('ENGINE_LOG_LEVEL') or 'INFO'
 
-DJANGO_LOG_LEVEL = os.getenv('DJANGO_LOG_LEVEL') or 'WARNING'
+VALID_LEVELS = ['DEBUG', 'INFO', 'WARNING', 'ERROR']
+
+LOG_LEVEL = os.getenv('ENGINE_LOG_LEVEL', '').upper() or 'INFO'
+
+assert LOG_LEVEL in VALID_LEVELS, f"level {LOG_LEVEL} not in {VALID_LEVELS}"
+
+DJANGO_LOG_LEVEL = os.getenv('DJANGO_LOG_LEVEL', '').upper() or 'WARNING'
+
+assert DJANGO_LOG_LEVEL in VALID_LEVELS
 
 
 class RateLimitFilter(object):
     """
     Limits the number of error emails when errors get triggered.
     """
-    TIMEOUT = 600
+    # Time out in seconds.
+    TIMEOUT = 300
     CACHE_KEY = "error-limiter"
 
     def filter(self, record):
-
         exists = cache.get(self.CACHE_KEY)
         if not exists:
             cache.set(self.CACHE_KEY, 1, self.TIMEOUT)
@@ -25,11 +33,17 @@ class RateLimitFilter(object):
         return not exists
 
 
+# Override the Django defaults
+#
+# https://stackoverflow.com/questions/20282521/django-request-logger-not-propagated-to-root
+#
+# LOGGING_CONFIG = None
+#
 LOGGING = {
 
     'version': 1,
 
-    'disable_existing_loggers': True,
+    'disable_existing_loggers': False,
 
     'formatters': {
 
@@ -54,6 +68,7 @@ LOGGING = {
     },
 
     'handlers': {
+
         'console': {
             'class': 'logging.StreamHandler',
             'formatter': 'verbose'
@@ -64,6 +79,14 @@ LOGGING = {
             'filters': ['require_debug_false', 'rate_limit'],
             'class': 'django.utils.log.AdminEmailHandler',
             'include_html': True,
+
+        },
+
+        'errors': {
+            'level': 'ERROR',
+            'filters': ['rate_limit'],
+            'class': 'logging.FileHandler',
+            'filename': 'error.log',
         }
 
     },
@@ -73,17 +96,13 @@ LOGGING = {
         'django': {
             'handlers': ['console', 'mail_admins'],
             'level': DJANGO_LOG_LEVEL,
-
+            'propagate': True,
         },
 
         'engine': {
             'handlers': ['console', 'mail_admins'],
             'level': LOG_LEVEL,
-        },
-
-        'biostar': {
-            'handlers': ['console', 'mail_admins'],
-            'level': LOG_LEVEL,
+            'propagate': True,
         },
 
     },

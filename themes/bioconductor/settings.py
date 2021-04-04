@@ -6,7 +6,19 @@ DEBUG = True
 
 CUSTOM_THEME = os.path.abspath(os.path.join(BASE_DIR, 'themes', 'bioconductor'))
 
+ACCOUNT_EMAIL_SUBJECT_PREFIX = "[bioc] "
 HTTP_PROTOCOL = "http"
+
+LANGUAGE_DETECTION = ["af", "ar", "bg",
+                      "bn", "ca", "cs", "cy",
+                      "da", "de", "el", "en",
+                      "es", "et", "fa", "fi", "fr",
+                      "gu", "he", "hi", "hr", "hu", "id",
+                      "it", "ja", "kn", "ko", "lt", "lv",
+                      "mk", "ml", "mr", "ne", "nl", "no", "pa",
+                      "pl", "pt", "ro", "ru", "sk", "sl", "so", "sq",
+                      "sv", "sw", "ta", "te", "th", "tl", "tr",
+                      "uk", "ur", "vi", "zh-cn", "zh-tw"]
 
 # Full file path to tags.
 # Each line is a list of comma separated tags.
@@ -17,10 +29,9 @@ REQUIRED_TAGS = os.path.join(CUSTOM_THEME, 'tags', 'packageList.txt')
 
 REQUIRED_TAGS_URL = 'http://bioconductor.org/packages/devel/BiocViews.html#___Software'
 
-# Ensure posts only have ascii characters.
-ENFORCE_ASCII = False
+# Rate to limit
+RATELIMIT_RATE = '200/d'
 
-REMAP_TYPE_DISPLAY = True
 # Post types displayed when creating, empty list displays all types.
 ALLOWED_POST_TYPES = ["Question", "Job", "Tutorial", "News"]
 

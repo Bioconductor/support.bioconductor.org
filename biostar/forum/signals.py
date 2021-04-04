@@ -5,10 +5,10 @@ from taggit.models import Tag
 from django.db.models import F, Q
 from biostar.accounts.models import Profile, Message, User
 from biostar.forum.models import Post, Award, Subscription
-from biostar.forum import tasks, auth, util, spam
+from biostar.forum import tasks, auth, util
 
 
-logger = logging.getLogger("biostar")
+logger = logging.getLogger("engine")
 
 
 @receiver(post_save, sender=Award)
@@ -19,8 +19,11 @@ def send_award_message(sender, instance, created, **kwargs):
     if created:
         template = "messages/awards_created.md"
         context = dict(award=instance)
-        # Send local message
-        tasks.create_messages(template=template, extra_context=context, user_ids=[instance.user.pk])
+
+        # Temporarily stop messages to high rep users.
+        if instance.user.profile.score < 1000:
+            # Send local message
+            tasks.create_messages(template=template, extra_context=context, user_ids=[instance.user.pk])
 
     return
 
@@ -64,7 +67,6 @@ def finalize_post(sender, instance, created, **kwargs):
 
     # Update last contributor, last editor, and last edit date to the thread
     Post.objects.filter(uid=root.uid).update(lastedit_user=instance.lastedit_user,
-                                             last_contributor=instance.last_contributor,
                                              lastedit_date=instance.lastedit_date)
 
     # Get newly created subscriptions since the last edit date.
@@ -88,15 +90,6 @@ def finalize_post(sender, instance, created, **kwargs):
 
         # Sanity check.
         assert instance.root and instance.parent
-
-        if instance.is_toplevel:
-            # Add tags for top level posts.
-            tags = [Tag.objects.get_or_create(name=name)[0] for name in instance.parse_tags()]
-            instance.tags.remove()
-            instance.tags.add(*tags)
-        else:
-            # Title is inherited from top level.
-            instance.title = "%s: %s" % (instance.get_type_display(), instance.root.title[:80])
 
         # Make the last editor first in the list of contributors
         # Done on post creation to avoid moderators being added for editing a post.
@@ -123,15 +116,23 @@ def finalize_post(sender, instance, created, **kwargs):
         # Notify users who are watching tags in this post
         tasks.notify_watched_tags.spool(uid=instance.uid, extra_context=extra_context)
 
-        mailing_list = User.objects.filter(profile__digest_prefs=Profile.ALL_MESSAGES)
-
-        emails = [user.email for user in mailing_list]
-
         # Send out mailing list when post is created.
-        tasks.mailing_list.spool(emails=emails, uid=instance.uid, extra_context=extra_context)
+        tasks.mailing_list.spool(uid=instance.uid, extra_context=extra_context)
 
-    # Classify post as spam/ham.
-    tasks.classify_spam.spool(uid=instance.uid)
+    # Set the tags on the instance.
+    if instance.is_toplevel:
+        tags = [Tag.objects.get_or_create(name=name)[0] for name in instance.parse_tags()]
+        instance.tags.clear()
+        instance.tags.add(*tags)
+
+    # Ensure spam posts get closed status
+    if instance.is_spam:
+        Post.objects.filter(uid=instance.uid).update(status=Post.CLOSED)
+
+    if not instance.is_toplevel:
+        # Title is inherited from top level.
+        title = f"{instance.get_type_display()}: {instance.root.title[:80]}"
+        Post.objects.filter(uid=instance.uid).update(title=title)
 
     # Ensure posts get re-indexed after being edited.
     Post.objects.filter(uid=instance.uid).update(indexed=False)
@@ -142,6 +143,13 @@ def finalize_post(sender, instance, created, **kwargs):
     sub_ids = list(subs.values_list('id', flat=True))
 
     # Notify subscribers
-    tasks.notify_followers.spool(sub_ids=sub_ids, author_id=instance.author.pk,
+    tasks.notify_followers.spool(sub_ids=sub_ids,
+                                 author_id=instance.author.pk,
                                  uid=instance.uid,
                                  extra_context=extra_context)
+
+
+@receiver(post_save, sender=Post)
+def check_spam(sender, instance, created, **kwargs):
+    # Classify post as spam/ham.
+    tasks.spam_check.spool(uid=instance.uid)

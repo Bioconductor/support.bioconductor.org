@@ -1,28 +1,25 @@
 import logging
-from datetime import timedelta
-from functools import wraps, lru_cache
 import os
-
+from datetime import timedelta
+from functools import wraps
 
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
-from django.views.decorators.csrf import ensure_csrf_cookie
-from django.db.models import Count, Q
-from django.core.paginator import Paginator
-from django.shortcuts import render, redirect, reverse
 from django.core.cache import cache
-from ratelimit.decorators import ratelimit
+from django.core.paginator import Paginator
+from django.db.models import Count, Q
+from django.http import Http404
+from django.shortcuts import render, redirect, reverse
+from django.views.decorators.csrf import ensure_csrf_cookie
 from taggit.models import Tag
 
 from biostar.accounts.models import Profile
-from biostar.forum import forms, auth, tasks, util, search, models
+from biostar.forum import forms, auth, tasks, util, search, models, moderate
 from biostar.forum.const import *
-from biostar.forum.models import Post, Vote, Badge, Subscription, Award
-from biostar.utils.decorators import is_moderator
-
-from biostar.accounts.auth import db_logger
+from biostar.forum.models import Post, Vote, Badge, Subscription, Log
+from biostar.utils.decorators import is_moderator, check_params, reset_count
 
 User = get_user_model()
 
@@ -34,12 +31,12 @@ RATELIMIT_KEY = settings.RATELIMIT_KEY
 POST_TYPE = dict(
     question=Post.QUESTION,
     jobs=Post.JOB,
-    tutorial=Post.TUTORIAL,
+    tutorials=Post.TUTORIAL,
     forum=Post.FORUM,
     planet=Post.BLOG,
     tools=Post.TOOL,
     news=Post.NEWS,
-    pages=Post.PAGE
+    pages=Post.PAGE,
 )
 
 LIMIT_MAP = dict(
@@ -50,10 +47,12 @@ LIMIT_MAP = dict(
     year=365
 )
 
+
 def post_exists(func):
     """
     Ensure uid passed to view function exists.
     """
+
     @wraps(func)
     def _wrapper_(request, **kwargs):
         uid = kwargs.get('uid')
@@ -62,6 +61,19 @@ def post_exists(func):
             messages.error(request, "Post does not exist.")
             return redirect(reverse("post_list"))
         return func(request, **kwargs)
+
+    return _wrapper_
+
+
+def authenticated(func):
+
+    def _wrapper_(request, **kwargs):
+        if request.user.is_anonymous:
+            messages.error(request, "You need to be logged in to view this page.")
+            return redirect(reverse('post_list'))
+
+        return func(request, **kwargs)
+
     return _wrapper_
 
 
@@ -71,121 +83,130 @@ class CachedPaginator(Paginator):
     """
 
     # Time to live for the cache, in seconds
-    TTL = 300
+    TTL = 3000
 
     def __init__(self, cache_key='', ttl=None, *args, **kwargs):
         self.cache_key = cache_key
-        self.ttl = ttl or self.TTL
+
+        # May not contain spaces
+        self.cache_key = ''.join(self.cache_key.split())
+
+        self.ttl = self.TTL
+
         super(CachedPaginator, self).__init__(*args, **kwargs)
 
     @property
     def count(self):
 
         if self.cache_key:
-            value = cache.get(self.cache_key) or super(CachedPaginator, self).count
-            cache.add(self.cache_key, value, self.ttl)
+            # See if it is access the cache
+            value = cache.get(self.cache_key)
+            if value is None:
+                value = super(CachedPaginator, self).count
+                #logger.debug(f'setting the cache for "{self.cache_key}"')
+                cache.set(self.cache_key, value, self.ttl)
         else:
             value = super(CachedPaginator, self).count
 
         return value
 
 
-def get_posts(user, topic="", order="", limit=None):
+def apply_sort(posts, limit=None, order=None):
+
+    # Apply post ordering.
+    if ORDER_MAPPER.get(order):
+        ordering = ORDER_MAPPER.get(order)
+        posts = posts.order_by(ordering)
+    else:
+        posts = posts.order_by("-rank")
+
+    days = LIMIT_MAP.get(limit, 0)
+    # Apply time limit if required.
+    if days:
+        delta = util.now() - timedelta(days=days)
+        posts = posts.filter(lastedit_date__gt=delta)
+
+    # Select related information used during rendering.
+    posts = posts.select_related("root").select_related("author__profile", "lastedit_user__profile")
+
+    return posts
+
+
+@reset_count(key='spam_count')
+def get_spam(request):
+    posts = Post.objects.filter(spam=Post.SPAM)
+    return posts
+
+
+def get_posts(request, topic=""):
     """
     Generates a post list on a topic.
     """
+
+    user = request.user
     # Topics are case insensitive.
     topic = topic or LATEST
     topic = topic.lower()
 
     # Detect known post types.
     post_type = POST_TYPE.get(topic)
-    query = Post.objects.valid_posts(u=user, is_toplevel=True)
 
-    # Determines how to start the preform_search.
+    # Get all open top level posts.
+    posts = Post.objects.filter(is_toplevel=True, root__status=Post.OPEN)
+
+    # Filter for various post types.
     if post_type:
-        query = query.filter(type=post_type)
+        posts = posts.filter(type=post_type)
 
-    elif topic == SHOW_SPAM:
-        query = query.filter(Q(spam=Post.SPAM))
+    elif topic == SHOW_SPAM and (user.is_anonymous and user.profile.is_moderator):
+        posts = get_spam(request)
 
     elif topic == OPEN:
-        query = query.filter(type=Post.QUESTION, answer_count=0)
+        posts = posts.filter(type=Post.QUESTION, answer_count=0)
 
     elif topic == BOOKMARKS and user.is_authenticated:
-        query = Post.objects.valid_posts(u=user, votes__author=user, votes__type=Vote.BOOKMARK)
+        posts = Post.objects.filter(votes__author=user, votes__type=Vote.BOOKMARK)
 
     elif topic == FOLLOWING and user.is_authenticated:
-        query = query.filter(subs__user=user).exclude(subs__type=Subscription.NO_MESSAGES)
+        posts = posts.filter(subs__user=user).exclude(subs__type=Subscription.NO_MESSAGES)
 
     elif topic == MYPOSTS and user.is_authenticated:
-        # Show users all of there posts ( deleted, spam, or quarantined )
-        query = Post.objects.filter(author=user)
+        # Show users all of their posts ( deleted, spam, or quarantined )
+        posts = Post.objects.filter(author=user)
 
     elif topic == MYVOTES and user.is_authenticated:
-        query = query.filter(votes__post__author=user)
+        posts = posts.filter(votes__post__author=user)
 
     elif topic == MYTAGS and user.is_authenticated:
         tags = map(lambda t: t.lower(), user.profile.my_tags.split(","))
-        query = query.filter(tags__name__in=tags).distinct()
+        posts = posts.filter(tags__name__in=tags).distinct()
 
-    # Search for tags
-    elif topic != LATEST and (topic not in POST_TYPE):
-        query = query.filter(tags__name=topic.lower())
-    else:
-        # Exclude spam posts unless specifically on the tab.
-        query = query.exclude(Q(spam=Post.SPAM))
-
-    # Apply post ordering.
-    if ORDER_MAPPER.get(order):
-        ordering = ORDER_MAPPER.get(order)
-        query = query.order_by(ordering)
-    else:
-        query = query.order_by("-rank")
-
-    days = LIMIT_MAP.get(limit, 0)
-    # Apply time limit if required.
-    if days:
-        delta = util.now() - timedelta(days=days)
-        query = query.filter(lastedit_date__gt=delta)
-
-    # Select related information used during rendering.
-    query = query.select_related("root").select_related("author__profile", "lastedit_user__profile")
-
-    return query
+    return posts
 
 
+@check_params(allowed=ALLOWED_PARAMS)
 def post_search(request):
-
     query = request.GET.get('query', '')
     length = len(query.replace(" ", ""))
-    page = int(request.GET.get('page', 1))
-    sortmap = dict(edit="lastedit_date", creation="creation_date", type='type')
-    sorting = request.GET.get('sort')
-    sortedby = [sortmap.get(sorting, "lastedit_date")]
 
     if length < settings.SEARCH_CHAR_MIN:
         messages.error(request, "Enter more characters before preforming search.")
         return redirect(reverse('post_list'))
 
-    sortedby += ["lastedit_date"]
-    sortedby = set(sortedby)
-    results = search.preform_whoosh_search(query=query, page=page, sortedby=sortedby,
-                                           reverse=True)
+    results = search.perform_search(query=query)
 
-    total = results.total
+    total = len(results)
     template_name = "search/search_results.html"
 
     question_flag = Post.QUESTION
     context = dict(results=results, query=query, total=total, template_name=template_name,
-                   question_flag=question_flag, stop_words=','.join(search.STOP),
-                   sort=sorting)
+                   question_flag=question_flag)
 
     return render(request, template_name=template_name, context=context)
 
 
+@check_params(allowed=ALLOWED_PARAMS)
 def pages(request, fname):
-
     # Add markdown file extension to markdown
     infile = f"{fname}.md"
     # Look for this file in static root.
@@ -195,7 +216,7 @@ def pages(request, fname):
         messages.error(request, "File does not exist.")
         return redirect("post_list")
 
-    admins = User.objects.filter(is_superuser=True)
+    admins = User.objects.filter(profile__role=Profile.MANAGER)
     mods = User.objects.filter(profile__role=Profile.MODERATOR).exclude(id__in=admins)
     admins = admins.prefetch_related("profile").order_by("-profile__score")
     mods = mods.prefetch_related("profile").order_by("-profile__score")
@@ -218,14 +239,15 @@ def mark_spam(request, uid):
 
     # Apply the toggle.
     if post:
-        auth.toggle_spam(request, post)
+        moderate.toggle_spam(request, post)
     else:
         messages.error(request, "Post does not seem to exist")
 
-    if state:
-        return redirect('/')
+    # Was spam actually
+    if post.is_spam:
+        return redirect(reverse('post_topic', kwargs=dict(topic='spam')))
     else:
-        return redirect('/?type=spam')
+        return redirect('/')
 
 
 @is_moderator
@@ -248,91 +270,166 @@ def release_quar(request, uid):
     return redirect('/')
 
 
-@ensure_csrf_cookie
-def post_list(request, topic=None, cache_key='', extra_context=dict()):
+def post_list(request, topic=None, tag="", cache_key=''):
     """
     Post listing. Filters, orders and paginates posts based on GET parameters.
     """
-    # The user performing the request.
-    user = request.user
 
     # Parse the GET parameters for filtering information
     page = request.GET.get('page', 1)
-    order = request.GET.get("order", "")
+    order = request.GET.get("order", "rank") or "rank"
     topic = topic or request.GET.get("type", "")
-    limit = request.GET.get("limit", "")
+    limit = request.GET.get("limit", "all") or "all"
 
-    # Get posts available to users.
-    posts = get_posts(user=user, topic=topic, order=order, limit=limit)
+    if tag:
+        # Get all open top level posts.
+        posts = Post.objects.filter(is_toplevel=True, root__status=Post.OPEN, tags__name__iexact=tag)
+    else:
+        # Get posts available to users.
+        posts = get_posts(request=request, topic=topic)
 
-    # Create the paginator.
+    posts = apply_sort(posts, limit=limit, order=order)
+
+    # Filter for any empty strings
     paginator = CachedPaginator(cache_key=cache_key, object_list=posts, per_page=settings.POSTS_PER_PAGE)
 
     # Apply the post paging.
     posts = paginator.get_page(page)
 
-    # Set the active tab.
-    tab = topic or LATEST
-
-    # Fill in context.
-    context = dict(posts=posts, tab=tab, order=order, type=topic, limit=limit, avatar=True,
-                   sidebar_key=SIDEBAR_CACHE_KEY)
-    context.update(extra_context)
-    # Render the page.
-    return render(request, template_name="post_list.html", context=context)
+    return posts
 
 
-@ratelimit(key=RATELIMIT_KEY,  rate='100/m')
+def get_key(prefix, request):
+    """
+    build cache suffix from order and limit
+    """
+    order = request.GET.get("order", 'rank') or 'rank'
+    limit = request.GET.get("limit", 'all') or 'all'
+    key = f'{prefix}-{order}-{limit}'
+
+    return key
+
+
+@check_params(allowed=ALLOWED_PARAMS)
+@ensure_csrf_cookie
 def latest(request):
     """
     Show latest post listing.
     """
-    order = request.GET.get("order", "")
-    tag = request.GET.get("tag", "")
-    topic = request.GET.get("type", "")
-    limit = request.GET.get("limit", "")
 
-    # Only cache unfiltered posts.
-    cache_off = (order or limit or tag or topic)
-    cache_key = None if cache_off else LATEST_CACHE_KEY
+    # Set the cache key based on order and limit
+    cache_key = get_key(prefix=LATEST, request=request)
 
-    return post_list(request, cache_key=cache_key)
+    posts = post_list(request, topic=LATEST, cache_key=cache_key)
+
+    context = dict(posts=posts, tab=LATEST)
+
+    return render(request, template_name="post_list.html", context=context)
 
 
-def authenticated(func):
-    def _wrapper_(request, **kwargs):
-        if request.user.is_anonymous:
-            messages.error(request, "You need to be logged in to view this page.")
-            return reverse('post_list')
-        return func(request, **kwargs)
-    return _wrapper_
+@check_params(allowed=ALLOWED_PARAMS)
+@ensure_csrf_cookie
+def post_tags(request, tag):
+    """
+    Show list of posts belonging to one post.
+    """
+    # Set the cache key based on order and limit
+    cache_key = get_key(prefix=tag, request=request)
+
+    posts = post_list(request, tag=tag, cache_key=cache_key)
+
+    context = dict(posts=posts, tag=tag)
+
+    return render(request, template_name="post_list.html", context=context)
+
+
+@check_params(allowed=ALLOWED_PARAMS)
+@ensure_csrf_cookie
+def post_topic(request, topic):
+    """
+    Show list of posts of a given type
+    """
+    # Set the cache key based on order and limit
+    cache_key = get_key(prefix=topic, request=request)
+
+    # Set the cache key based on order and limit
+    posts = post_list(request, topic=topic, cache_key=cache_key)
+
+    context = dict(posts=posts, topic=topic, tab=topic)
+
+    return render(request, template_name="post_list.html", context=context)
+
+
+@ensure_csrf_cookie
+@authenticated
+def bookmarks(request):
+    """
+    Show posts bookmarked by user.
+    """
+
+    posts = post_list(request, topic=BOOKMARKS)
+
+    context = dict(posts=posts, topic=BOOKMARKS, tab=BOOKMARKS)
+    return render(request, template_name="user_bookmarks.html", context=context)
+
+
+@ensure_csrf_cookie
+@authenticated
+def mytags(request):
+
+    posts = post_list(request, topic=MYTAGS)
+
+    context = dict(posts=posts, topic=MYTAGS, tab=MYTAGS)
+    return render(request, template_name="user_mytags.html", context=context)
+
+
+@ensure_csrf_cookie
+@authenticated
+def myposts(request):
+    """
+    Show posts by user
+    """
+    posts = post_list(request, topic=MYPOSTS)
+
+    context = dict(posts=posts, topic=MYPOSTS, tab=MYPOSTS)
+
+    return render(request, template_name="user_myposts.html", context=context)
+
+
+@ensure_csrf_cookie
+@authenticated
+def following(request):
+    """
+    Show posts followed by user.
+    """
+    posts = post_list(request, topic=FOLLOWING)
+
+    context = dict(posts=posts, topic=FOLLOWING, tab=FOLLOWING)
+    return render(request, template_name="user_following.html", context=context)
 
 
 @authenticated
+@reset_count(key="vote_count")
 def myvotes(request):
     """
     Show posts by user that received votes
     """
     page = request.GET.get('page', 1)
 
-    votes = Vote.objects.filter(post__author=request.user).prefetch_related('post', 'post__root',
-                                                                            'author__profile').order_by("-date")
+    votes = Vote.objects.filter(post__author=request.user).select_related('post', 'post__root',
+                                                                          'author__profile').order_by("-date")
     # Create the paginator
-    paginator = CachedPaginator(object_list=votes, per_page=settings.POSTS_PER_PAGE)
+    paginator = CachedPaginator(object_list=votes,
+                                per_page=settings.POSTS_PER_PAGE)
 
     # Apply the votes paging.
     votes = paginator.get_page(page)
 
-    # Clear the votes count.
-    counts = request.session.get(COUNT_DATA_KEY, {})
-    # Set votes count back to 0
-    counts[VOTES_COUNT] = 0
-    request.session.update(dict(counts=counts))
-
     context = dict(votes=votes, page=page, tab='myvotes')
-    return render(request, template_name="votes_list.html", context=context)
+    return render(request, template_name="user_votes.html", context=context)
 
 
+@check_params(allowed=ALLOWED_PARAMS)
 def tags_list(request):
     """
     Show posts by user
@@ -343,13 +440,14 @@ def tags_list(request):
     count = Count('post', filter=Q(post__is_toplevel=True))
 
     db_query = Q(name__icontains=query) if query else Q()
-    cache_key = None if query else TAGS_CACHE_KEY
+    cache_key = '' if query else TAGS_CACHE_KEY
 
     tags = Tag.objects.annotate(nitems=count).filter(db_query)
     tags = tags.order_by('-nitems')
 
     # Create the paginator
-    paginator = CachedPaginator(cache_key=cache_key, object_list=tags,
+    paginator = CachedPaginator(cache_key=cache_key,
+                                object_list=tags,
                                 per_page=settings.POSTS_PER_PAGE)
 
     # Apply the votes paging.
@@ -360,56 +458,9 @@ def tags_list(request):
     return render(request, 'tags_list.html', context=context)
 
 
-@authenticated
-def myposts(request):
-    """
-    Show posts by user
-    """
-
-    return post_list(request, topic=MYPOSTS)
-
-
-def post_topic(request, topic):
-    """
-    Show list of posts of a given type
-    """
-    return post_list(request, topic=topic)
-
-
-@authenticated
-def following(request):
-    """
-    Show posts followed by user
-    """
-    user = request.user
-    cache_key = FOLLOWING_CACHE_KEY % user.id
-
-    context = dict(sidebar_key=cache_key)
-    return post_list(request, topic=FOLLOWING, extra_context=context)
-
-
-@authenticated
-def bookmarks(request):
-    """
-    Show posts bookmarked by user
-    """
-    user = request.user
-    cache_key = BOOKMARKS_CACHE_KEY % user.id
-
-    context = dict(sidebar_key=cache_key)
-    return post_list(request, topic=BOOKMARKS, extra_context=context)
-
-
-@authenticated
-def mytags(request):
-
-    return post_list(request=request, topic=MYTAGS)
-
-
+@check_params(allowed=ALLOWED_PARAMS)
 def community_list(request):
-
     users = User.objects.select_related("profile")
-
     page = request.GET.get("page", 1)
     ordering = request.GET.get("order", "visit")
     limit_to = request.GET.get("limit", "time")
@@ -428,41 +479,43 @@ def community_list(request):
         users = users.filter(db_query)
 
     # Remove the cache when filters are given.
-    no_cache = days or (query and len(query) > 2) or ordering
-    cache_key = None if no_cache else USERS_LIST_KEY
+    no_cache = True
+    cache_key = '' if no_cache else USERS_LIST_KEY
 
     order = ORDER_MAPPER.get(ordering, "visit")
     users = users.filter(profile__state__in=[Profile.NEW, Profile.TRUSTED])
     users = users.order_by(order)
 
-    # Create the paginator
+    # Create the paginator (six users per row)
     paginator = CachedPaginator(cache_key=cache_key, object_list=users,
-                                per_page=settings.POSTS_PER_PAGE)
+                                per_page=60)
     users = paginator.get_page(page)
     context = dict(tab="community", users=users, query=query, order=ordering, limit=limit_to)
 
     return render(request, "community_list.html", context=context)
 
 
+@check_params(allowed=ALLOWED_PARAMS)
 def badge_list(request):
     badges = Badge.objects.annotate(count=Count("award")).order_by('-count')
     context = dict(badges=badges)
     return render(request, "badge_list.html", context=context)
 
 
+@check_params(allowed=ALLOWED_PARAMS)
 def badge_view(request, uid):
     badge = Badge.objects.filter(uid=uid).annotate(count=Count("award")).first()
     target = request.GET.get('user')
     page = request.GET.get('page', 1)
 
-    user = User.objects.filter(profile__uid=target).first()
-
     if not badge:
         messages.error(request, f"Badge with id={uid} does not exist.")
         return redirect(reverse("badge_list"))
 
-    awards = badge.award_set.all().order_by("-pk")
-    if user:
+    awards = badge.award_set.all().order_by("-date")
+
+    if target:
+        user = User.objects.filter(profile__uid=target).first()
         awards = awards.filter(user=user)
 
     awards = awards.prefetch_related("user", "user__profile", "post", "post__root")
@@ -474,19 +527,24 @@ def badge_view(request, uid):
     return render(request, "badge_view.html", context=context)
 
 
+@check_params(allowed=ALLOWED_PARAMS)
 @ensure_csrf_cookie
 def post_view(request, uid):
     "Return a detailed view for specific post"
 
     # Get the post.
     post = Post.objects.filter(uid=uid).select_related('root').first()
-
+    user = request.user
     if not post:
         messages.error(request, "Post does not exist.")
         return redirect("post_list")
 
     if not post.is_toplevel:
         return redirect(post.get_absolute_url())
+
+    # Return 404 when post is spam and user is anonymous.
+    if post.is_spam and user.is_anonymous:
+        raise Http404("Post does not exist.")
 
     # Form used for answers
     form = forms.PostShortForm(user=request.user, post=post)
@@ -514,6 +572,7 @@ def post_view(request, uid):
     return render(request, "post_view.html", context=context)
 
 
+@check_params(allowed=ALLOWED_PARAMS)
 @login_required
 def new_post(request):
     """
@@ -548,29 +607,29 @@ def new_post(request):
     return render(request, "new_post.html", context=context)
 
 
-@post_exists
+@reset_count(key='mod_count')
+@check_params(allowed=ALLOWED_PARAMS)
 @login_required
-def post_moderate(request, uid):
-    """Used to make display post moderate form given a post request."""
+def view_logs(request):
+    LIMIT = 100
 
-    user = request.user
-    post = Post.objects.filter(uid=uid).first()
+    if 0 and request.user.is_superuser:
+        logs = Log.objects.all().order_by("-id")[:LIMIT]
 
-    if request.method == "POST":
-        form = forms.PostModForm(post=post, data=request.POST, user=user, request=request)
+    elif request.user.profile.is_moderator:
+        logs = Log.objects.all().select_related("user", "user__profile").order_by("-id")[:LIMIT]
 
-        if form.is_valid():
-            action = form.cleaned_data.get('action')
-            comment = form.cleaned_data.get('comment')
-            url = auth.moderate(request=request, post=post, action=action, comment=comment)
-            return redirect(url)
-        else:
-            errors = ','.join([err for err in form.non_field_errors()])
-            messages.error(request, errors)
-            return redirect(reverse("post_view", kwargs=dict(uid=post.root.uid)))
     else:
-        form = forms.PostModForm(post=post, user=user, request=request)
+        logs = Log.objects.filter(pk=0)
 
-    context = dict(form=form, post=post)
-    return render(request, "forms/form_moderate.html", context)
+    logs = logs.select_related("user", "post", "user__profile", "post__author")
 
+    context = dict(logs=logs)
+
+    return render(request, "view_logs.html", context=context)
+
+def error(request):
+    """
+    Checking error propagation and logging
+    """
+    1/0

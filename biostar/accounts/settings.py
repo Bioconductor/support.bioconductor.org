@@ -16,19 +16,24 @@ ADMINS = [
     ("Admin User", "admin@localhost")
 ]
 
+# The address the error emails are coming from.
+SERVER_EMAIL = "admin@localhost"
+
+# Whitelist of Ip addresses to not rate limit.
+WHITELIST_IP = []
+
 PAGEDOWN_APP = ['pagedown.apps.PagedownConfig']
 
 PAGEDOWN_IMAGE_UPLOAD_ENABLED = True
 
-
-DEBUG_USERS = False
+# Allows admins to log in as any user.
+DEBUG_USERS = True
 
 # Maximum size per image uploaded, in mb.
 MAX_IMAGE_SIZE_MB = 2
 
 # Maximum number of images allowed.
 MAX_IMAGES = 100
-
 
 # User above this score do not get a reCAPTCHA
 RECAPTCHA_THRESHOLD_USER_SCORE = 1
@@ -59,6 +64,16 @@ ADMIN_UPLOAD_SIZE = 1000
 
 MESSAGES_PER_PAGE = 5
 
+
+# Additional middleware.
+MIDDLEWARE += [
+    #'biostar.accounts.middleware.limiter',
+]
+
+
+SIGNUP_RATE = '50/h'
+PASSWORD_RESET_RATE = '50/h'
+
 # Set RECAPTCH keys here.
 RECAPTCHA_PUBLIC_KEY = ""
 RECAPTCHA_PRIVATE_KEY = ""
@@ -68,6 +83,15 @@ SOCIALACCOUNT_EMAIL_VERIFICATION = None
 SOCIALACCOUNT_EMAIL_REQUIRED = False
 SOCIALACCOUNT_QUERY_EMAIL = True
 
+# Key used to set ratelimitter.
+# https://django-ratelimit.readthedocs.io/en/stable/security.html
+# Must be set to the correct header
+IP_HEADER_KEY = 'REMOTE_ADDR'
+RATELIMIT_KEY = f"header:{IP_HEADER_KEY}"
+
+# Rate to limit ( set to high value to disable ).
+RATELIMIT_RATE = '5000/h'
+
 
 # Other settings
 ACCOUNT_AUTHENTICATION_METHOD = "email"
@@ -75,7 +99,7 @@ ACCOUNT_EMAIL_REQUIRED = True
 ACCOUNT_UNIQUE_EMAIL = True
 ACCOUNT_USERNAME_REQUIRED = False
 ACCOUNT_EMAIL_VERIFICATION = "mandatory"
-ACCOUNT_EMAIL_SUBJECT_PREFIX = "[bioc] "
+ACCOUNT_EMAIL_SUBJECT_PREFIX = "[biostar] "
 ACCOUNT_PASSWORD_MIN_LENGHT = 6
 ACCOUNT_USER_MODEL_USERNAME_FIELD = None
 ACCOUNT_USER_MODEL_EMAIL_FIELD = "email"
@@ -84,10 +108,6 @@ LOGIN_REDIRECT_URL = "/"
 ACCOUNT_AUTHENTICATED_LOGIN_REDIRECTS = True
 
 SOCIALACCOUNT_ADAPTER = "biostar.accounts.adapter.SocialAccountAdapter"
-
-# Location of token file in local machine.
-TOKEN_FILE = "~/.bio/token"
-TOKEN_FILE = os.path.expanduser(TOKEN_FILE)
 
 ACCOUNTS_APPS = [
 
@@ -103,7 +123,7 @@ ACCOUNTS_APPS = [
 ]
 
 # Should the server look up locations in a task.
-LOCATION_LOOKUP = False
+LOCATION_LOOKUP = True
 
 INSTALLED_APPS = DEFAULT_APPS + ACCOUNTS_APPS + EMAILER_APP + PAGEDOWN_APP
 
@@ -131,3 +151,4 @@ SOCIAL_CLIENTS = [
 ]
 
 GOOGLE_TRACKER = ""
+

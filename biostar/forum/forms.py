@@ -1,6 +1,6 @@
-
 from pagedown.widgets import PagedownWidget
 import os
+import re
 import langdetect
 from django import forms
 from django.utils.safestring import mark_safe
@@ -25,22 +25,15 @@ MAX_TITLE = 400
 MAX_TAGS = 5
 
 
-def valid_ascii(text):
-
-    try:
-        if settings.ENFORCE_ASCII:
-            text.encode('ascii')
-        else:
-            text.encode('utf-8')
-    except Exception as exc:
-        raise ValidationError(f'Title contains invalid characters: {exc}')
-
-
 def valid_language(text):
-
     supported_languages = settings.LANGUAGE_DETECTION
     if supported_languages:
-        lang = langdetect.detect(text)
+        try:
+            lang = langdetect.detect(text)
+        except Exception as exc:
+            logger.error(f"Lang detect error: {exc}")
+            return
+
         if lang not in supported_languages:
             raise ValidationError(f'Language "{lang}" is not one of the supported languages {supported_languages}!')
 
@@ -58,10 +51,7 @@ def valid_title(text):
         raise ValidationError(f'Too Long, please add less than {MAX_TITLE} characters.')
 
     try:
-        if settings.ENFORCE_ASCII:
-            text.encode('ascii')
-        else:
-            text.encode('utf-8')
+        text.encode('utf-8')
     except Exception as exc:
         raise ValidationError(f'Title contains invalid characters: {exc}')
 
@@ -79,10 +69,10 @@ def informative_choices(choices):
     Map choices for post types to a more informative description.
     """
     mapper = {
-              Post.QUESTION: "Ask a question", Post.TUTORIAL: "Share a Tutorial",
-              Post.JOB: "Post a Job Opening", Post.FORUM: "Start a Discussion",
-              Post.TOOL: "Share a Tool", Post.NEWS: "Announce News"
-              }
+        Post.QUESTION: "Ask a question", Post.TUTORIAL: "Share a Tutorial",
+        Post.JOB: "Post a Job Opening", Post.FORUM: "Start a Discussion",
+        Post.TOOL: "Share a Tool", Post.NEWS: "Announce News"
+    }
     new_choices = []
     for c in choices:
         new_choices.append((c[0], mapper.get(c[0], c[1])))
@@ -99,7 +89,6 @@ def required_tags(lst):
     """
     Ensure at least one tag is present in the
     """
-
     if not os.path.isfile(settings.REQUIRED_TAGS):
         return
 
@@ -112,6 +101,7 @@ def required_tags(lst):
     source_set = set(lst)
     target_set = set(tags)
 
+    # If one common element is not found, display the required tasks
     if not common_elem(source_set, target_set):
         url = settings.REQUIRED_TAGS_URL
         msg = mark_safe(f"At least one package from <a href='{url}' target='_blank'>this list</a> is required.")
@@ -121,7 +111,6 @@ def required_tags(lst):
 
 
 class PostLongForm(forms.Form):
-
     choices = [opt for opt in Post.TYPE_CHOICES if opt[0] in Post.TOP_LEVEL]
 
     if settings.ALLOWED_POST_TYPES:
@@ -133,7 +122,7 @@ class PostLongForm(forms.Form):
                                    widget=forms.Select(choices=choices, attrs={'class': "ui dropdown"}),
                                    help_text="Select a post type.")
     title = forms.CharField(label="Post Title", max_length=200, min_length=2,
-                            validators=[valid_title, valid_language],
+                            validators=[valid_title],
                             help_text="Enter a descriptive title to promote better answers.")
     tag_val = forms.CharField(label="Post Tags", max_length=50, required=True, validators=[valid_tag],
                               help_text="""
@@ -169,12 +158,20 @@ class PostLongForm(forms.Form):
         """
         Take out duplicates
         """
-        tag_val = self.cleaned_data["tag_val"] or 'tag1,tag2'
-        tags = set([x for x in tag_val.split(",") if x])
 
-        required_tags(tags)
+        pattern = r'^[A-Za-z0-9-._]+$'
+        tag_val = self.cleaned_data["tag_val"]
+        tag_val = tag_val.replace(',', ' ').split()
 
-        return ",".join(tags)
+        for tag in tag_val:
+            match = re.match(pattern, tag)
+            if not match:
+                raise forms.ValidationError(f'Invalid characters in tag: {tag}')
+
+        tags = set(tag_val)
+        tags = ",".join(tags)
+
+        return tags
 
     def clean_content(self):
         content = self.cleaned_data["content"]
@@ -188,11 +185,11 @@ class PostLongForm(forms.Form):
 
 class PostShortForm(forms.Form):
     MIN_LEN, MAX_LEN = 10, 10000
-    parent_uid = forms.CharField(widget=forms.HiddenInput(), min_length=2, max_length=32)
+    parent_uid = forms.CharField(widget=forms.HiddenInput(), min_length=2, max_length=32, required=False)
     content = forms.CharField(widget=forms.Textarea,
                               min_length=MIN_LEN, max_length=MAX_LEN, strip=False)
 
-    def __init__(self, user=None, post=None, recaptcha=True, *args, **kwargs):
+    def __init__(self, user=None, post=None,  *args, **kwargs):
         self.user = user
         self.post = post
         super().__init__(*args, **kwargs)
@@ -207,44 +204,3 @@ class PostShortForm(forms.Form):
         if self.user.is_anonymous:
             raise forms.ValidationError("You need to be logged in.")
         return cleaned_data
-
-
-class PostModForm(forms.Form):
-
-    def __init__(self, post, request, user, *args, **kwargs):
-        self.post = post
-        self.user = user
-        self.request = request
-
-        super(PostModForm, self).__init__(*args, **kwargs)
-
-        choices = [
-            (OPEN_POST, "Open post"),
-            (DELETE, "Delete post."),
-            (REPORT_SPAM, "Mark as spam."),
-
-        ]
-
-        # Options for top level posts.
-        if post.is_toplevel:
-            suffix = [(CLOSE, "Close post ( reason required ). "),
-                      (DUPLICATE, "Duplicated post ( links required ).")]
-            choices = [(BUMP_POST, "Bump post.")] + choices + suffix
-            self.fields['comment'] = forms.CharField(required=False, max_length=1000, widget=forms.Textarea,
-                                                     strip=True)
-
-        self.fields['action'] = forms.IntegerField(widget=forms.RadioSelect(choices=choices), required=True)
-
-    def clean(self):
-        action = self.cleaned_data.get("action")
-        comment = self.cleaned_data.get("comment")
-
-        if not self.user.profile.is_moderator:
-            raise forms.ValidationError("You need to be a moderator to preform that action.")
-
-        if (action == CLOSE or action == DUPLICATE) and not comment:
-            raise forms.ValidationError("Closing a post requires a reason.")
-
-        return self.cleaned_data
-
-

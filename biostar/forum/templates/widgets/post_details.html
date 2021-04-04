@@ -1,7 +1,9 @@
 {% load forum_tags %}
 {% load cache %}
 
-{% cache 300 post post.uid %}
+
+{#  IS_MODERATOR set in context.py  #}
+{% cache 600 post context.IS_MODERATOR post.uid %}
 
     <div class="post {{ post.css }} item" data-value="{{ post.uid }}">
 
@@ -46,6 +48,7 @@
                     {% endif %}
                 </div>
 
+                {%  comment %}
                 {% if post.high_spam_score and user.profile.is_moderator %}
 
                     <a href="{% url 'mark_spam' post.uid %}">
@@ -59,6 +62,7 @@
                     </a>
 
                 {% endif %}
+                {%  endcomment %}
 
                 <div class="right floated muted">
                     {% post_user_line post avatar=avatar %}

@@ -1,9 +1,13 @@
 # Inherit from the main settings file.
 import os, sys
+
 from biostar.accounts.settings import *
 
 # Inherit from the accounts settings file.
 from biostar.planet.settings import *
+
+def join(*args):
+    return os.path.abspath(os.path.join(*args))
 
 # Django debug flag.
 DEBUG = True
@@ -19,96 +23,62 @@ AWARDS_PER_PAGE = 50
 
 STATS_DIR = os.path.join(BASE_DIR, "export", "stats")
 
-REQUIRED_TAGS = ""
 
-# Time period to cache Ips for banning.
-TIME_PERIOD = 24 * 3600
-
-# How many visit within that time period.
-MAX_VISITS = 50
-
-# Whitelist of Ip addresses.
-IP_WHITELIST = [
-
-]
-
-WHITE_LIST_DOMAIN = [
-
-]
-
+# Enable image upload
 PAGEDOWN_IMAGE_UPLOAD_ENABLED = True
 
 # Upload path for pagedown images, relative to media root.
 PAGEDOWN_IMAGE_UPLOAD_PATH = "images"
 
+# File path listing tags.
+# With one at least being required when making a post.
+REQUIRED_TAGS = ''
+
+# Link to display after a post fails to have required tags.
 REQUIRED_TAGS_URL = "/"
 
-BANNED_IPS = os.path.join(BASE_DIR, 'export', 'logs', 'banned.txt')
+# How to run tasks in the background.
+# Valid options; block, disable, threaded, uwsgi, celery.
+TASK_RUNNER = 'block'
 
-
-# Posts cut off when applying a filtre
-CUTOFF = 1000
-
-# The gravatar image used for users, applied to all users.
-GRAVATAR_ICON = ''
-
+# Threshold to classify spam
 SPAM_THRESHOLD = .5
 
-# Spam index used to classify new posts as spam or ham.
-SPAM_INDEX_NAME = os.getenv("SPAM_INDEX_NAME", "spam")
-
-SPAM_INDEX_DIR = 'spammers'
-
-# Ensure posts only have ascii characters.
-ENFORCE_ASCII = True
-
-# Absolute path to spam index directory in export/
-SPAM_INDEX_DIR = os.path.abspath(os.path.join(MEDIA_ROOT, '..', SPAM_INDEX_DIR))
+# Allows post closing.
+ALLOW_POST_CLOSING = False
 
 # Classify posts and assign a spam score on creation.
 CLASSIFY_SPAM = True
 
-ENABLE_DIGESTS = False
-
-# Disable all asynchronous tasks
-DISABLE_TASKS = False
-
 # Log the time for each request
 TIME_REQUESTS = True
 
-# Indexing interval in seconds.
-INDEX_SECS_INTERVAL = 10
-
 # Number of results to display in total.
-SEARCH_LIMIT = 20
+SEARCH_LIMIT = 50
 
+# Initialize the planet app.
 INIT_PLANET = False
-
-
-TASKS_CELERY = False
 
 # Minimum amount of characters to preform searches
 SEARCH_CHAR_MIN = 1
 
-# Number of results to display per page.
-SEARCH_RESULTS_PER_PAGE = 50
-
+# How many posts to index in one job.
 BATCH_INDEXING_SIZE = 1000
-
 
 # Add another context processor to first template.
 TEMPLATES[0]['OPTIONS']['context_processors'] += [
     'biostar.forum.context.forum'
 ]
 
-VOTE_FEED_COUNT = 10
-LOCATION_FEED_COUNT = 5
-AWARDS_FEED_COUNT = 10
+# Set the number of items in each feed.
+VOTE_FEED_COUNT = 7
+LOCATION_FEED_COUNT = 7
+AWARDS_FEED_COUNT = 7
 REPLIES_FEED_COUNT = 15
 
 SIMILAR_FEED_COUNT = 30
 
-SESSION_UPDATE_SECONDS = 40
+SESSION_UPDATE_SECONDS = 10
 
 # Maximum number of awards every SESSION_UPDATE_SECONDS.
 MAX_AWARDS = 2
@@ -118,8 +88,13 @@ INDEX_NAME = os.environ.setdefault("INDEX_NAME", "index")
 # Relative index directory
 
 INDEX_DIR = os.environ.setdefault("INDEX_DIR", "search")
+
 # Absolute path to index directory in export/
-INDEX_DIR = os.path.abspath(os.path.join(MEDIA_ROOT, '..', INDEX_DIR))
+INDEX_DIR = join(MEDIA_ROOT, '..', INDEX_DIR)
+
+# Absolute path to the spam model
+SPAM_DATA  = join(BASE_DIR, "export", "spam.data.tar.gz")
+SPAM_MODEL = join(BASE_DIR, "export", "spam.model")
 
 SOCIALACCOUNT_EMAIL_VERIFICATION = None
 SOCIALACCOUNT_EMAIL_REQUIRED = False
@@ -130,22 +105,22 @@ ACCOUNT_AUTHENTICATED_LOGIN_REDIRECTS = True
 
 SOCIALACCOUNT_ADAPTER = "biostar.accounts.adapter.SocialAccountAdapter"
 
-PAGEDOWN_APP = ['pagedown.apps.PagedownConfig']
-
 FORUM_APPS = [
-
     'biostar.forum.apps.ForumConfig',
 ]
 
+
+VOTE_RATE = '250/h'
+EDIT_RATE = '250/h'
+SUBS_RATE = '100/h'
+DIGEST_RATE = '100/h'
+
 # Additional middleware.
 MIDDLEWARE += [
-    'biostar.forum.middleware.ban_ip',
+    #'biostar.forum.middleware.ban_ip',
     'biostar.forum.middleware.user_tasks',
     'biostar.forum.middleware.benchmark',
 ]
-
-# Remap the post type display to a more human friendly one.
-REMAP_TYPE_DISPLAY = False
 
 # Post types displayed when creating, empty list displays all types.
 ALLOWED_POST_TYPES = []
@@ -157,13 +132,11 @@ PAGEDOWN_WIDGET_CSS = ('pagedown/demo/browser/demo.css',)
 
 INSTALLED_APPS = DEFAULT_APPS + FORUM_APPS + PAGEDOWN_APP + PLANET_APPS + ACCOUNTS_APPS + EMAILER_APP
 
+# Documentation for docs
 FORUM_DOCS = os.path.join(DOCS_ROOT, "forum")
 
 # Add docs to static files directory
 STATICFILES_DIRS += [DOCS_ROOT]
-
-# Directory for the planets app.
-#PLANET_DIR = ''
 
 ROOT_URLCONF = 'biostar.forum.urls'
 
@@ -171,8 +144,6 @@ WSGI_APPLICATION = 'biostar.wsgi.application'
 
 # Time between two accesses from the same IP to qualify as a different view (seconds)
 POST_VIEW_TIMEOUT = 300
-
-COUNT_INTERVAL_WEEKS = 10000
 
 # This flag is used flag situation where a data migration is in progress.
 # Allows us to turn off certain type of actions (for example sending emails).
@@ -187,14 +158,7 @@ CACHES = {
     }
 }
 
-# Tries to load up secret settings from a predetermined module
-# This is for convenience only!
-try:
-    from conf.run.site_secrets import *
-    #print(f"Loaded secrets from: conf.run.secrets")
-except Exception as exc:
-    print(f"Secrets module not imported: {exc}", file=sys.stderr)
-    pass
+TASK_MODULES = ("biostar.forum.tasks", )
 
 # Enable debug toolbar specific functions
 if DEBUG_TOOLBAR:
@@ -202,3 +166,6 @@ if DEBUG_TOOLBAR:
         'debug_toolbar',
     ])
     MIDDLEWARE.append('debug_toolbar.middleware.DebugToolbarMiddleware')
+
+
+

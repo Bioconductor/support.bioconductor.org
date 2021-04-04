@@ -4,8 +4,9 @@ from django.test import TestCase
 from django.urls import reverse
 
 from biostar.accounts.models import User
-
-from biostar.forum import models, views, auth, forms, const
+from unittest.mock import patch, MagicMock
+from biostar.forum import models, views
+from biostar.forum.moderate import *
 from biostar.utils.helpers import fake_request
 from biostar.forum.util import get_uuid
 
@@ -20,10 +21,12 @@ class PostTest(TestCase):
                                          password="tested", is_superuser=True, is_staff=True)
 
         # Create an existing tested post
-        self.post = models.Post.objects.create(title="Test", author=self.owner, content="Test",
-                                     type=models.Post.QUESTION)
+        self.post = models.Post.objects.create(title="Test", author=self.owner, content="Test", type=models.Post.QUESTION, uid='foo')
+        self.uid = 'foo'
 
         self.owner.save()
+        self.post.save()
+
         pass
 
     def moderate(self, choices, post, extra={}):
@@ -31,9 +34,10 @@ class PostTest(TestCase):
         for action in choices:
             data = {"action": action}
             data.update(extra)
+
             url = reverse('post_moderate', kwargs=dict(uid=post.uid))
             request = fake_request(url=url, data=data, user=self.owner)
-            response = views.post_moderate(request=request, uid=post.uid)
+            response = post_moderate(request=request, uid=post.uid)
             self.process_response(response)
 
         return
@@ -41,47 +45,39 @@ class PostTest(TestCase):
     def test_toplevel_moderation(self):
         "Test top level post moderation."
         # Test every moderation action
-        choices = [const.BUMP_POST, const.OPEN_POST, const.DELETE]
+        choices = ['bump', 'open', 'delete', 'close', 'offtopic', 'relocate']
+
+        self.post = models.Post.objects.create(title="Test",
+                                               author=self.owner, content="Test",
+                                               type=models.Post.QUESTION, uid='bar')
 
         self.moderate(choices=choices, post=self.post)
 
-        return
-
     def test_answer_moderation(self):
         "Test answer moderation."
-        choices = [const.TOGGLE_ACCEPT, const.DELETE]
+        choices = ['open', 'delete', 'close', 'offtopic', 'relocate']
 
         # Create an answer to moderate
-        anwser = models.Post.objects.create(title="Test", author=self.owner, content="Test",
-                                  type=models.Post.ANSWER, root=self.post,
+        answer = models.Post.objects.create(title="Test", author=self.owner, content="Test",
+                                  type=models.Post.ANSWER, root=self.post, uid='foo2',
                                   parent=self.post)
 
-        self.moderate(choices=choices, post=anwser)
+        # Add the same amount of giving of the
+        self.moderate(choices=choices, post=answer)
 
         return
 
     def test_comment_moderation(self):
         "Test comment moderation."
-        choices = [const.DELETE]
+        choices = [ 'open', 'delete', 'close', 'offtopic', 'relocate']
 
         # Create a comment to moderate
         comment = models.Post.objects.create(title="Test", author=self.owner, content="Test",
-                                   type=models.Post.COMMENT, root=self.post,
+                                   type=models.Post.COMMENT, root=self.post, uid='foo3',
                                    parent=self.post)
 
         self.moderate(choices=choices, post=comment, extra={'pid': self.post.uid})
 
-    def test_duplicate_post(self):
-        "Test duplicate post moderation"
-
-        data = {"dupe": "google.com"}
-
-        url = reverse('post_moderate', kwargs=dict(uid=self.post.uid))
-        request = fake_request(url=url, data=data, user=self.owner)
-        response = views.post_moderate(request=request, uid=self.post.uid)
-        self.process_response(response)
-
-        pass
 
     def process_response(self, response):
         "Check the response on POST request is redirected"

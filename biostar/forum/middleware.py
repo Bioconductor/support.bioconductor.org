@@ -1,6 +1,6 @@
 import logging
 import time
-
+from functools import wraps
 from socket import gethostbyaddr, gethostbyname
 from django.conf import settings
 from django.contrib import messages
@@ -10,14 +10,14 @@ from django.shortcuts import redirect
 from biostar.accounts.models import Profile, Message
 from biostar.accounts.tasks import detect_location
 
-from biostar.accounts.const import MESSAGE_COUNT
-from biostar.forum.const import VOTES_COUNT
+from biostar.planet.views import set_planet_count
+from biostar.utils import helpers
 
 from . import auth, tasks, const, util
 from .models import Vote
 from .util import now
 
-logger = logging.getLogger("biostar")
+logger = logging.getLogger("engine")
 
 
 def benchmark(get_response):
@@ -40,10 +40,12 @@ def benchmark(get_response):
         msg = f'time={delta}ms for path={request.path}'
 
         if delta > 1000:
-            logger.warning(f"\n***\n*** SLOW: {msg}\n***\a")
-        else:
-            if settings.DEBUG:
-                logger.info(f'{msg}')
+            ip = helpers.get_ip(request)
+            uid = request.user.profile.uid if request.user.is_authenticated else '0'
+            #agent = request.META.get('HTTP_USER_AGENT', None)
+            logger.warning(f"SLOW: {msg} IP:{ip} uid:{uid}")
+        elif settings.DEBUG:
+            logger.info(f'{msg}')
 
         return response
 
@@ -51,6 +53,7 @@ def benchmark(get_response):
 
 
 def update_status(user):
+
     # Update a new user into trusted after a threshold score is reached.
     if (user.profile.state == Profile.NEW) and (user.profile.score > 50):
         user.profile.state = Profile.TRUSTED
@@ -58,57 +61,6 @@ def update_status(user):
         return True
 
     return user.profile.trusted
-
-
-def domain_is_whitelisted(ip):
-    try:
-        host = gethostbyaddr(ip)[0]
-        return host.endswith(settings.WHITE_LIST_DOMAIN) and (ip == gethostbyname(host))
-    except:
-        return False
-
-
-def ban_ip(get_response):
-    """
-
-    """
-
-    def middleware(request):
-        user = request.user
-
-        if settings.DEBUG:
-            return get_response(request)
-
-        if user.is_anonymous:
-            oip = util.get_ip(request)
-            ips = oip.split(".")[:-1]
-            ip = ".".join(ips)
-
-            if ip in settings.IP_WHITELIST:
-                return get_response(request)
-
-            if ip not in cache:
-                cache.set(ip, 0, settings.TIME_PERIOD)
-
-            value = cache.get(ip)
-            if value >= settings.MAX_VISITS:
-                # Raise redirect exception
-                if domain_is_whitelisted(oip):
-                    cache.set(ip, 0)
-                else:
-                    now = util.now()
-                    message = f"{now}\tbanned\t{ip}\t{oip}\n"
-                    logger.error(message)
-                    fp = open(settings.BANNED_IPS, "a")
-                    fp.write(message)
-                    fp.close()
-                    return redirect('/static/message.txt')
-            else:
-                cache.incr(ip)
-
-        return get_response(request)
-
-    return middleware
 
 
 def user_tasks(get_response):
@@ -122,6 +74,7 @@ def user_tasks(get_response):
 
         # Views for anonymous users are not analzed further.
         if user.is_anonymous:
+            set_planet_count(request)
             return get_response(request)
 
         # Banned and suspended will be logged out.
@@ -131,32 +84,27 @@ def user_tasks(get_response):
 
         update_status(user=user)
 
-        # Parses the ip of the request.
-        ip = util.get_ip(request)
-
         # Find out the time since the last visit.
         elapsed = (now() - user.profile.last_login).total_seconds()
 
         # Update information since the last visit.
         if elapsed > settings.SESSION_UPDATE_SECONDS:
+
             # Detect user location if not set in the profile.
-            detect_location.spool(ip=ip, user_id=user.id)
+            ip = helpers.get_ip(request)
+
+            # Detect user location if not set in the profile.
+            if not user.profile.location:
+                detect_location.spool(ip=ip, user_id=user.id)
 
             # Set the last login time.
             Profile.objects.filter(user=user).update(last_login=now())
 
-            # The number of new messages since last visit.
-            message_count = Message.objects.filter(recipient=user, unread=True).count()
-
-            # The number of new votes since last visit.
-            vote_count = Vote.objects.filter(post__author=user, date__gt=user.profile.last_login).exclude(
-                author=user).count()
-
-            # Store the counts into the session.
-            counts = {MESSAGE_COUNT: message_count, VOTES_COUNT: vote_count}
+            # Compute latest counts.
+            counts = auth.get_counts(user=user)
 
             # Set the session.
-            request.session[const.COUNT_DATA_KEY] = counts
+            request.session[settings.SESSION_COUNT_KEY] = counts
 
             # Trigger award generation.
             tasks.create_user_awards.spool(user_id=user.id)

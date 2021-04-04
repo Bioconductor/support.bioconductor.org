@@ -1,5 +1,5 @@
 import logging
-from mistune import markdown
+import mistune
 from allauth.socialaccount.models import SocialApp
 from django.conf import settings
 from django.contrib import messages
@@ -23,16 +23,22 @@ from django.utils.http import urlsafe_base64_decode
 from django.utils.safestring import mark_safe
 from ratelimit.decorators import ratelimit
 
+from .auth import validate_login, send_verification_email
 
+from biostar.utils.helpers import get_ip
+from biostar.utils.decorators import limited, reset_count
 from . import forms, tasks
-from .auth import validate_login, send_verification_email, db_logger
-from .const import *
-from .models import User, Profile, Message, Log
-from .tokens import account_verification_token
-from .util import now, get_uuid, get_ip
 
+from .const import *
+from .models import User, Profile, Message
+from .tokens import account_verification_token
+from .util import now, get_uuid
 
 logger = logging.getLogger('engine')
+
+
+SIGNUP_RATE = settings.SIGNUP_RATE
+PASSWORD_RESET_RATE = settings.PASSWORD_RESET_RATE
 
 RATELIMIT_KEY = settings.RATELIMIT_KEY
 
@@ -41,36 +47,16 @@ def edit_profile(request):
     if request.user.is_anonymous:
         messages.error(request, "Must be logged in to edit profile")
         return redirect("/")
-    user = request.user
-    initial = dict(username=user.username, email=user.email, name=user.profile.name,location=user.profile.location,
-                   website=user.profile.website, twitter=user.profile.twitter, scholar=user.profile.scholar,
-                   text=user.profile.text, my_tags=user.profile.my_tags, message_prefs=user.profile.message_prefs,
-                   email_verified=user.profile.email_verified, watched_tags=user.profile.watched_tags,
-                   digest_prefs=user.profile.digest_prefs)
 
-    form = forms.EditProfile(user=user, initial=initial)
+    user = request.user
+    form = forms.EditProfile(user=user)
 
     if request.method == "POST":
-        form = forms.EditProfile(data=request.POST, user=user, initial=initial, files=request.FILES)
+        form = forms.EditProfile(data=request.POST, user=user, files=request.FILES)
 
         if form.is_valid():
             # Update the email and username of User object.
-            username = form.cleaned_data["username"]
-            email = form.cleaned_data['email']
-            User.objects.filter(pk=user.pk).update(username=username, email=email)
-            Profile.objects.filter(user=user).update(name=form.cleaned_data['name'],
-                                                     watched_tags=form.cleaned_data['watched_tags'],
-                                                     location=form.cleaned_data['location'],
-                                                     website=form.cleaned_data['website'],
-                                                     twitter=form.cleaned_data['twitter'],
-                                                     scholar=form.cleaned_data['scholar'],
-                                                     text=form.cleaned_data["text"],
-                                                     my_tags=form.cleaned_data['my_tags'],
-                                                     message_prefs=form.cleaned_data["message_prefs"],
-                                                     html=markdown(form.cleaned_data["text"]),
-                                                     digest_prefs=form.cleaned_data['digest_prefs'])
-            # Recompute watched tags
-            Profile.objects.filter(user=user).first().add_watched()
+            form.save()
 
             return redirect(reverse("user_profile", kwargs=dict(uid=user.profile.uid)))
 
@@ -86,7 +72,7 @@ def listing(request):
 
 
 @login_required
-def user_moderate(request, uid):
+def user_moderate(request, uid, callback=lambda *args, **kwargs: None):
 
     source = request.user
     target = User.objects.filter(id=uid).first()
@@ -104,10 +90,7 @@ def user_moderate(request, uid):
             profile.state = state
             profile.save()
             # Log the moderation action
-            text = f"user={target.pk} state set to {target.profile.get_state_display()}"
-
-            db_logger(user=request.user, text=text, action=Log.MODERATE)
-
+            callback()
             messages.success(request, "User moderation complete.")
         else:
             errs = ','.join([err for err in form.non_field_errors()])
@@ -120,6 +103,7 @@ def user_moderate(request, uid):
     return render(request, "accounts/user_moderate.html", context)
 
 
+@reset_count(key="message_count")
 @login_required
 def message_list(request):
     """
@@ -134,11 +118,6 @@ def message_list(request):
     # Get the pagination info
     paginator = Paginator(msgs, settings.MESSAGES_PER_PAGE)
     msgs = paginator.get_page(page)
-
-    counts = request.session.get(COUNT_DATA_KEY, {})
-    # Set message count back to 0
-    counts[MESSAGE_COUNT] = 0
-    request.session.update(dict(counts=counts))
 
     context = dict(tab="messages", all_messages=msgs)
     return render(request, "message_list.html", context)
@@ -155,7 +134,7 @@ def user_profile(request, uid):
     active = request.GET.get("active", "profile")
 
     # Apply filter to what is shown.
-    show = request.GET.get('show', '')
+    limit = request.GET.get('limit', '')
 
     # User viewing profile is a moderator
     is_mod = (request.user.is_authenticated and request.user.profile.is_moderator)
@@ -166,7 +145,7 @@ def user_profile(request, uid):
     allow_debug = request.user.is_superuser and settings.DEBUG_USERS
 
     context = dict(target=profile.user, active=active, allow_debug=allow_debug, show_info=show_info,
-                   const_post=POSTS, const_project=PROJECT, can_moderate=can_moderate, show=show,
+                   const_post=POSTS, const_project=PROJECT, can_moderate=can_moderate, limit=limit,
                    tab="profile")
 
     return render(request, "accounts/user_profile.html", context)
@@ -189,18 +168,22 @@ def toggle_notify(request):
     return redirect(reverse('user_profile', kwargs=dict(uid=user.profile.uid)))
 
 
-@ratelimit(key=RATELIMIT_KEY, rate='10/m', block=True, method=ratelimit.UNSAFE)
+#@limited(key=RATELIMIT_KEY, rate=SIGNUP_RATE)
 def user_signup(request):
 
     if request.method == 'POST':
 
         form = forms.SignUpWithCaptcha(request.POST)
         if form.is_valid():
+
             user = form.save()
             login(request, user, backend="django.contrib.auth.backends.ModelBackend")
             Profile.objects.filter(user=user).update(last_login=now())
             tasks.verification_email.spool(user_id=user.pk)
+
             return redirect("/")
+        else:
+            messages.error(request, "Invalid form submission")
 
     else:
         form = forms.SignUpWithCaptcha()
@@ -225,7 +208,7 @@ def image_upload_view(request):
     form = forms.ImageUploadForm(data=request.POST, files=request.FILES, user=user)
     if form.is_valid():
         url = form.save()
-        db_logger(user=user, action=Log.CREATE, text=f'uploaded an image: {url}')
+
         return JsonResponse({'success': True, 'url': url})
 
     return JsonResponse({'success': False, 'error': form.errors})
@@ -291,7 +274,6 @@ def user_login(request):
                 login(request, user, backend="django.contrib.auth.backends.ModelBackend")
                 ipaddr = get_ip(request)
                 text = f"user {user.id} ({user.email}) logged in from {ipaddr}"
-                db_logger(user=request.user, text=text, action=Log.LOGIN, ipaddr=ipaddr)
 
                 return redirect(next_url)
             else:
@@ -303,20 +285,6 @@ def user_login(request):
     return render(request, "accounts/login.html", context=context)
 
 
-@login_required
-def view_logs(request):
-    LIMIT = 300
-
-    if 0 and request.user.is_superuser:
-        logs = Log.objects.all().order_by("-id")[:LIMIT]
-    elif request.user.profile.is_moderator:
-        logs = Log.objects.all().filter(action=Log.MODERATE).select_related("user", "user__profile").order_by("-id")[:LIMIT]
-    else:
-        logs = []
-
-    context = dict(logs=logs)
-
-    return render(request, "accounts/view_logs.html", context=context)
 
 
 @login_required
@@ -378,46 +346,27 @@ def external_login(request):
     return redirect("/")
 
 
-@ratelimit(key=RATELIMIT_KEY, rate='500/h')
-@ratelimit(key=RATELIMIT_KEY, rate='25/m')
+#@limited(key=RATELIMIT_KEY, rate=PASSWORD_RESET_RATE)
 def password_reset(request):
 
-    # if request.method == "POST":
-    #     email = request.POST.get('email', '')
-    #     user = User.objects.filter(email=email).first()
-    #     if not user:
-    #         messages.error(request, "Email does not exist.")
-    #         return redirect(reverse('password_reset'))
-    # The email template instance
-    # email = sender.EmailTemplate(template_name)
-    #
-    # # Default context added to each template.
-    # context = dict(domain=settings.SITE_DOMAIN, protocol=settings.PROTOCOL,
-    #                port=settings.HTTP_PORT, name=settings.SITE_NAME, subject=subject)
-    #
-    # # Additional context added to the template.
-    # context.update(extra_context)
-    #
-    # # Generate and send the email.
-    # email.render()
     return PasswordResetView.as_view(template_name="accounts/password_reset_form.html",
                                      subject_template_name="accounts/password_reset_subject.txt",
                                      email_template_name="accounts/password_reset_email.html"
                                      )(request=request)
 
 
-@ratelimit(key=RATELIMIT_KEY, rate='500/h')
-@ratelimit(key=RATELIMIT_KEY, rate='25/m')
+#@limited(key=RATELIMIT_KEY, rate=PASSWORD_RESET_RATE)
 def password_reset_done(request):
+
     context = dict()
 
     return PasswordResetDoneView.as_view(extra_context=context,
                                          template_name="accounts/password_reset_done.html")(request=request)
 
 
-@ratelimit(key=RATELIMIT_KEY, rate='500/h')
-@ratelimit(key=RATELIMIT_KEY, rate='25/m')
+#@limited(key=RATELIMIT_KEY, rate=PASSWORD_RESET_RATE)
 def pass_reset_confirm(request, uidb64, token):
+
     context = dict()
 
     return PasswordResetConfirmView.as_view(extra_context=context,

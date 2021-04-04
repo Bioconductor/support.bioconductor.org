@@ -1,0 +1,46 @@
+{% extends "forum_base.html" %}
+{% load static %}
+{% load accounts_tags %}
+{% load forum_tags %}
+{% load humanize %}
+{% block headtitle %}{{ target.profile.name }}{% endblock %}
+
+{%  block title %}
+    Moderator Log
+{%  endblock %}
+
+{% block content %}
+    <div class="ui vertical segment">
+
+        Resources:
+        <a href="/info/mods/"><i class="info circle icon"></i> Moderator FAQ</a> &bull;
+        <a href="https://join.slack.com/t/biostar/shared_invite/zt-6kygyc40-5_wLtOMd__KqgsrhQlogEQ"><i
+                class="slack icon"></i> Join the Biostar Slack Channel</a>
+
+    </div>
+    <div class="ui vertical segment">
+        <div class="ui middle aligned list">
+            {% for log in logs %}
+                <div class="item">
+                    <img class="ui avatar image" src="{% gravatar user=log.user size=80 %}"/>
+                    <div class="content">
+                        <em>{{ log.date|naturaltime }}</em> &bull;
+                        <a href="{{ log.user.profile.get_absolute_url }}">{{ log.user.profile.name }}</a>
+
+                        {{ log.text }}
+
+                        {% if log.target %}
+                            &bull;
+                            <a href="{{ log.target.profile.get_absolute_url }}">{{ log.target.profile.name }} </a>
+                        {% endif %}
+
+                        {% if log.post %}
+                            &bull; <em><a href="{{ log.post.get_absolute_url }}">{{ log.post.title }}</a></em>
+                        {% endif %}
+
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+{% endblock %}

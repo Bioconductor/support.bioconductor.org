@@ -1,0 +1,9 @@
+{% extends "post_list.html" %}
+{% load forum_tags %}
+{% load cache %}
+
+{% block sidebar %}
+    {% cache 500 "follow" request.user.pk %}
+        {% custom_feed ftype="follow" objs=posts title='People you are following' %}
+    {% endcache %}
+{% endblock %}

@@ -1,6 +1,3 @@
-# Moderation action codes.
-MOD_ACTIONS = list(range(9))
-BUMP_POST, OPEN_POST, TOGGLE_ACCEPT, MOVE_ANSWER, DUPLICATE, OFFTOPIC, DELETE, CLOSE, REPORT_SPAM = MOD_ACTIONS
 
 # Filter actions
 RANK, VIEWS, REPLIES, TAGGED, \
@@ -26,31 +23,21 @@ ORDER_MAPPER = {
     ACTIVITY: '-profile__date_joined'
 }
 
-VOTES_COUNT = 'vote_count'
+ALLOWED_PARAMS = {"page", "order", "type", "limit", "query", "user", "active"}
 
-FOLLOWING_CACHE_KEY = "FOLLOWING%s"
-BOOKMARKS_CACHE_KEY = "BOOKMARKS%s"
-SIDEBAR_CACHE_KEY = "SIDEBAR"
-
+# Cache keys used to cache objects.
 LATEST_CACHE_KEY = "LATEST"
-
 TAGS_CACHE_KEY = "TAGS"
-
 SIMILAR_CACHE_KEY = "SIMILAR"
-USERS_CACHE_KEY = "MENTIONED_USERS"
-
 USERS_LIST_KEY = "USERS_LIST"
+
 # The name of the session count data.
 COUNT_DATA_KEY = "COUNT_DATA"
+VOTES_COUNT = 'vote_count'
 
-# Redirection field name.
-REDIRECT_FIELD_NAME = 'next'
+# Tabs to pick from in post listing
+MYVOTES, MYPOSTS, MYTAGS, OPEN, \
+FOLLOWING, SHOW_SPAM, BOOKMARKS = ["myvotes", "myposts", "mytags", "open", "following", "spam", "bookmarks"]
 
-MYVOTES, MYPOSTS, MYTAGS, OPEN, FOLLOWING, SHOW_SPAM = ["myvotes", "myposts", "mytags", "open", "following", "spam"]
+JOBS, TOOLS, TUTORIALS, FORUM, PLANET, LATEST = ["jobs", "tools", "tutorials", "forum", "planet", "latest"]
 
-# Post type names for filtering in the UI.
-JOBS, TOOLS, TUTORIALS, FORUM, PLANET = ["jobs", "tools", "tutorials", "forum", "planet"]
-
-BOOKMARKS, MESSAGE = ["bookmarks", "message"]
-
-MENTIONED, COMMUNITY, LATEST = ["mentioned", "community", "latest"]

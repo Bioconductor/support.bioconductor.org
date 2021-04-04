@@ -1,13 +1,13 @@
-import uuid
 import os
-from datetime import datetime, timedelta
-from taggit.managers import TaggableManager
+
 import mistune
-from taggit.models import Tag
 from django.conf import settings
-from django.shortcuts import reverse
 from django.contrib.auth.models import User
 from django.db import models
+from django.shortcuts import reverse
+from taggit.managers import TaggableManager
+from taggit.models import Tag
+
 from biostar.accounts import util
 
 
@@ -59,10 +59,7 @@ class Profile(models.Model):
     state = models.IntegerField(default=NEW, choices=STATE_CHOICES, db_index=True)
 
     READER, MODERATOR, MANAGER, BLOGGER = range(4)
-    ROLE_CHOICES = [
-        (READER, "Reader"), (MODERATOR, "Moderator"), (MANAGER, "Admin"),
-        (BLOGGER, "Blog User")
-    ]
+    ROLE_CHOICES = [(READER, "Reader"), (MODERATOR, "Moderator"), (MANAGER, "Admin"), (BLOGGER, "Blog User")]
 
     NO_DIGEST, DAILY_DIGEST, WEEKLY_DIGEST, MONTHLY_DIGEST, ALL_MESSAGES = range(5)
 
@@ -133,7 +130,7 @@ class Profile(models.Model):
     watched_tags = models.CharField(max_length=MAX_TEXT_LEN, default="", blank=True)
 
     # Tag objects
-    watched = TaggableManager()
+    watched = TaggableManager(blank=True)
 
     # Description provided by the user html.
     text = models.TextField(default="No profile information", null=True, max_length=MAX_TEXT_LEN, blank=True)
@@ -144,11 +141,28 @@ class Profile(models.Model):
     # The state of the user email verification.
     email_verified = models.BooleanField(default=False)
 
+    # The user handle
+    handle = models.CharField(max_length=MAX_NAME_LEN, null=True, unique=True, db_index=True)
+
     # Automatic notification
     notify = models.BooleanField(default=False)
 
     # Opt-in to all messages from the site
     opt_in = models.BooleanField(default=False)
+
+    # User icon types.
+    # See: https://en.gravatar.com/site/implement/images/
+    DEFAULT_ICON = "default"
+    USER_ICON_CHOICES = [
+        (DEFAULT_ICON, "Gravatar image"),
+        ("mp", "Mystery person"),
+        ("retro", "Retro"),
+        ("identicon", "Identicon"),
+        ("monsterid", "Monster"),
+        ("robohash", "Robohash"),
+        ("wavatar", "Wavatar"),
+    ]
+    user_icon = models.CharField(default=DEFAULT_ICON, choices=USER_ICON_CHOICES, max_length=100)
 
     objects = ProfileManager()
 
@@ -157,13 +171,12 @@ class Profile(models.Model):
 
     def save(self, *args, **kwargs):
         self.uid = self.uid or util.get_uuid(8)
-        self.html = self.html or mistune.markdown(self.text)
+        self.handle = self.handle or util.get_uuid(8)
         self.max_upload_size = self.max_upload_size or self.set_upload_size()
         self.name = self.name or self.user.first_name or self.user.email.split("@")[0]
         self.date_joined = self.date_joined or util.now()
         self.last_login = self.last_login or util.now()  # - timedelta(days=1)
         self.token = self.token or util.get_uuid(16)
-
         super(Profile, self).save(*args, **kwargs)
 
     @property
@@ -172,18 +185,23 @@ class Profile(models.Model):
 
     @property
     def upload_size(self):
-
-        # Give staff higher limits.
-        if self.user.is_staff or self.user.is_superuser:
-            return self.max_upload_size * 100
-        return self.max_upload_size
+        """
+        Return max upload for given user.
+        Used to validate in forms
+        """
+        # Get the default upload size.
+        msize = self.max_upload_size
+        # Increase the admin size when checking for validation.
+        admin_msize = msize * 100
+        size = admin_msize if self.user.is_staff or self.user.is_superuser else msize
+        return size
 
     def parse_tags(self):
         return [tag.lower() for tag in self.watched_tags.split(",") if tag]
 
     def add_watched(self):
         tags = [Tag.objects.get_or_create(name=name)[0] for name in self.parse_tags()]
-        self.watched.remove()
+        self.watched.clear()
         self.watched.add(*tags)
 
     def set_upload_size(self):
@@ -205,6 +223,14 @@ class Profile(models.Model):
         """Check to see if this user requires reCAPTCHA"""
         is_required = not (self.trusted or self.score > settings.RECAPTCHA_THRESHOLD_USER_SCORE)
         return is_required
+
+    def data_threshold(self):
+        """
+        Return max data threshold
+        """
+        threshold = settings.MAX_DATA_ADMINS if self.is_moderator else settings.MAX_DATA_USERS
+
+        return threshold
 
     @property
     def mailing_list(self):
@@ -280,39 +306,59 @@ class Profile(models.Model):
         return self.score <= settings.LOW_REP_THRESHOLD and not self.is_moderator
 
 
-class Log(models.Model):
-    """
-    Represents moderation actions
-    """
-    MODERATE, CREATE, EDIT, LOGIN, LOGOUT, DEFAULT = range(6)
-
-    ACTIONS_CHOICES = [
-        (MODERATE, "Moderate"),
-        (CREATE, "Create"),
-        (EDIT, "Edit"),
-        (LOGIN, "Login"),
-        (LOGOUT, "Logout"),
-        (DEFAULT, "Default")
+class UserLog(models.Model):
+    DEFAULT, ACTION = 1, 2
+    CHOICES = [
+        (DEFAULT, "Default"),
+        (ACTION, "Action"),
     ]
+    # User that performed the action.
+    user = models.ForeignKey(User, null=True, blank=True, on_delete=models.CASCADE)
 
-    # User that is logged.
-    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, db_index=True)
+    # A potential subject user (it may be null)
+    subject = models.ForeignKey(User, related_name="subject", null=True, blank=True, on_delete=models.CASCADE)
 
     # The IP address associated with the log.
     ipaddr = models.GenericIPAddressField(null=True, blank=True)
 
     # Actions that the user took.
-    action = models.IntegerField(choices=ACTIONS_CHOICES, default=DEFAULT, db_index=True)
+    action = models.IntegerField(choices=CHOICES, default=DEFAULT, db_index=True)
 
     # The logging information.
-    text = models.TextField()
+    text = models.TextField(null=True, blank=True)
+
+    # Data attached to the logging info.
+    data = models.TextField(null=True, blank=True)
 
     # Date this log was created.
     date = models.DateTimeField()
 
     def save(self, *args, **kwargs):
         self.date = self.date or util.now()
-        super(Log, self).save(*args, **kwargs)
+        super(UserLog, self).save(*args, **kwargs)
+
+
+def is_moderator(user):
+    """
+    Shortcut to identify moderators from users.
+    """
+
+    # Anonymous users have no moderation rights.
+    if user.is_anonymous:
+        return False
+
+    # User has been inactivated.
+    if not user.is_active:
+        return False
+
+    # Staff or superusers have moderation rights.
+    if user.is_staff or user.is_superuser:
+        return True
+
+    # Local roles that permit moderation.
+    role_check = user.profile.role in (Profile.MODERATOR, Profile.MANAGER)
+
+    return role_check
 
 
 # Connects user to message bodies
@@ -338,7 +384,7 @@ class Message(models.Model):
     SPAM_CHOICES = [(SPAM, "Spam"), (VALID, "Not spam"), (UNKNOWN, "Unknown")]
     spam = models.IntegerField(choices=SPAM_CHOICES, default=UNKNOWN)
 
-    #uid = models.CharField(max_length=32, unique=True)
+    # uid = models.CharField(max_length=32, unique=True)
     sender = models.ForeignKey(settings.AUTH_USER_MODEL, related_name="author", on_delete=models.CASCADE)
     recipient = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
 

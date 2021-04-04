@@ -2,7 +2,7 @@
 Markdown parser to render the Biostar style markdown.
 """
 import re
-import inspect
+import inspect, logging
 from functools import partial
 import mistune
 import requests
@@ -20,6 +20,9 @@ from bleach.sanitizer import Cleaner
 from biostar.forum import auth
 from biostar.forum.models import Post, Subscription
 from biostar.accounts.models import Profile, User
+from bleach.callbacks import nofollow
+
+logger = logging.getLogger('engine')
 
 # Test input.
 TEST_INPUT = '''
@@ -60,7 +63,7 @@ rec = re.compile
 # Biostar patterns
 PORT = ':' + settings.HTTP_PORT if settings.HTTP_PORT else ''
 SITE_URL = f"{settings.SITE_DOMAIN}{PORT}"
-USER_PATTERN = rec(fr"^http(s)?://{SITE_URL}/accounts/profile/(?P<uid>[\w_.-]+)(/)?")
+USER_PATTERN = rec(fr"^http(s)?://{SITE_URL}/u/(?P<uid>[\w_.-]+)(/)?")
 POST_TOPLEVEL = rec(fr"^http(s)?://{SITE_URL}/p/(?P<uid>(\w+))(/)?$")
 POST_ANCHOR = rec(fr"^http(s)?://{SITE_URL}/p/\w+/\#(?P<uid>(\w+))(/)?")
 
@@ -78,8 +81,11 @@ ALLOWED_ATTRIBUTES = {
 ALLOWED_TAGS = ['p', 'div', 'br', 'code', 'pre', 'h1', 'h2', 'h3', 'h4', 'hr', 'span', 's',
                 'sub', 'sup', 'b', 'i', 'img', 'strong', 'strike', 'em', 'underline',
                 'super', 'table', 'thead', 'tr', 'th', 'td', 'tbody']
-
 ALLOWED_TAGS = bleach.ALLOWED_TAGS + ALLOWED_TAGS
+
+ALLOWED_PROTOCOLS = ['ftp', 'http']
+ALLOWED_PROTOCOLS = bleach.ALLOWED_PROTOCOLS + ALLOWED_PROTOCOLS
+
 ALLOWED_STYLES = ['color', 'font-weight', 'background-color', 'width height']
 
 # Youtube patterns
@@ -236,7 +242,7 @@ class BiostarInlineLexer(MonkeyPatch):
 
         handle = m.group("handle")
         # Query user and get the link
-        user = User.objects.filter(username=handle).first()
+        user = User.objects.filter(profile__handle=handle).first()
         if user:
             profile = reverse("user_profile", kwargs=dict(uid=user.profile.uid))
             link = f'<a href="{profile}">{user.profile.name}</a>'
@@ -275,7 +281,7 @@ class BiostarInlineLexer(MonkeyPatch):
         link = m.group(0)
         profile = Profile.objects.filter(uid=uid).first()
         name = profile.name if profile else f"Invalid user uid: {uid}"
-        return f'<a href="{link}">USER: {name}</a>'
+        return f'<a href="{link}">{name}</a>'
 
     def enable_youtube_link1(self):
         self.rules.youtube_link1 = YOUTUBE_PATTERN1
@@ -332,7 +338,6 @@ class BiostarInlineLexer(MonkeyPatch):
 
 
 def embedder(attrs, new, embed=None):
-
     embed = [] if embed is None else embed
 
     # Existing <a> tag, leave as is.
@@ -369,7 +374,6 @@ def embedder(attrs, new, embed=None):
 
 
 def linkify(text):
-
     # List of links to embed
     embed = []
     html = bleach.linkify(text=text, callbacks=[partial(embedder, embed=embed)], skip_tags=['pre', 'code'])
@@ -380,24 +384,28 @@ def linkify(text):
         emb = f'<a href="{source}">{source}</a>'
         html = html.replace(emb, target)
 
+    # Add nofollow to each link.
+    html = bleach.linkify(text=html, callbacks=[nofollow], skip_tags=['pre', 'code'])
+
     return html
 
 
-def safe(callable, *args, **kwargs):
+def safe(f):
     """
-    Safely call an object without causing
+    Safely call an object without causing errors
     """
-    text = kwargs.get('text')
-    try:
-        return callable(*args, **kwargs)
-    except Exception as exc:
+    def inner(*args, **kwargs):
+        try:
+            return f(*args, **kwargs)
+        except Exception as exc:
+            logger.error(f"Error with {f.__name__}: {exc}")
+            text = kwargs.get('text', args[0])
+            return text
 
-        prefix = callable.__name__ if inspect.isfunction(callable) else type(callable).__name__
-
-        errmsg = f'<p>{prefix.upper()} ERROR = {exc}</p><p>{text}</p>'
-        return errmsg
+    return inner
 
 
+@safe
 def parse(text, post=None, clean=True, escape=True, allow_rewrite=False):
     """
     Parses markdown into html.
@@ -421,18 +429,18 @@ def parse(text, post=None, clean=True, escape=True, allow_rewrite=False):
 
     markdown = mistune.Markdown(hard_wrap=True, renderer=renderer, inline=inline)
 
-    html = safe(markdown, text=text)
+    output = markdown(text=text)
     # Bleach clean the html.
     if clean:
-        html = safe(bleach.clean, text=html,
-                    tags=ALLOWED_TAGS,
-                    styles=ALLOWED_STYLES,
-                    attributes=ALLOWED_ATTRIBUTES)
-
+        output = bleach.clean(text=output,
+                            tags=ALLOWED_TAGS,
+                            styles=ALLOWED_STYLES,
+                            attributes=ALLOWED_ATTRIBUTES,
+                            protocols=ALLOWED_PROTOCOLS)
     # Embed sensitive links into html
-    html = safe(linkify, text=html)
+    output = linkify(text=output)
 
-    return html
+    return output
 
 
 def test():

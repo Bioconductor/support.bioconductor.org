@@ -3,10 +3,14 @@ import bleach
 import logging
 import time
 import uuid
+from functools import wraps
 from itertools import islice, count
 from datetime import datetime
 from calendar import timegm
 from django.utils.timezone import utc
+
+
+logger = logging.getLogger('engine')
 
 
 def fixcase(name):
@@ -26,24 +30,6 @@ def split(text):
 def get_uuid(limit=32):
     return str(uuid.uuid4())[:limit]
 
-
-def get_ip(request):
-    """
-    Attempts to extract the IP number from the HTTP request headers.
-    """
-    ip1 = request.META.get('REMOTE_ADDR', '')
-    ip2 = request.META.get('HTTP_X_FORWARDED_FOR', '').split(",")[0].strip()
-    ip = ip1 or ip2 or '0.0.0.0'
-    return ip
-
-def get_ip_domain(request):
-    """
-
-    """
-    ip = get_ip(request)
-    dm = ip.split(".")[:-1]
-    dm = ".".join(dm)
-    return dm
 
 def strip_tags(text):
     "Strip html tags from text"
@@ -79,28 +65,3 @@ def pluralize(value, word):
     else:
         return "%d %s" % (value, word)
 
-
-def timer_func():
-    """
-    Prints progress on inserting elements.
-    """
-
-    last = time.time()
-
-    def elapsed(msg):
-        nonlocal last
-        now = time.time()
-        sec = round(now - last, 1)
-        last = now
-        print(f"{msg} in {sec} seconds")
-
-    def progress(index, step=5000, msg=""):
-        nonlocal last
-        if index % step == 0:
-            print("**" * 5)
-            print()
-            elapsed(f"... {index} {msg}")
-            print()
-            print("**" * 5)
-
-    return elapsed, progress

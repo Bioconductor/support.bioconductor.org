@@ -1,20 +1,18 @@
 import logging
-import datetime
-
-import bleach
+from datetime import timedelta
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
+from django.core.cache import cache
+from django.core.cache.utils import make_template_fragment_key
 from django.db import models
+from django.db.models import F
 from django.db.models import Q
 from django.shortcuts import reverse
 from taggit.managers import TaggableManager
+
+from biostar.utils import helpers
 from biostar.accounts.models import Profile
-from django.db.models import F
-
-from django.core.cache import cache
-from django.core.cache.utils import make_template_fragment_key
-
 from . import util
 
 User = get_user_model()
@@ -46,8 +44,9 @@ class PostManager(models.Manager):
         # Filter for open posts.
         query = query.filter(status=Post.OPEN, root__status=Post.OPEN)
 
-        query = query.filter(models.Q(spam=Post.NOT_SPAM) | models.Q(spam=Post.DEFAULT) |
-                             models.Q(root__spam=Post.NOT_SPAM) | models.Q(root__spam=Post.DEFAULT))
+        # Mark every spam post as 'closed'
+        # This doubles the query time.
+        query = query.exclude(models.Q(spam=Post.SPAM) | models.Q(root__spam=Post.SPAM))
 
         return query
 
@@ -59,7 +58,7 @@ class PostManager(models.Manager):
         return query
 
 
-def drop_cache(key, *params):
+def delete_fragment_cache(key, *params):
     """
     Drops a template fragment cache.
     """
@@ -67,12 +66,15 @@ def drop_cache(key, *params):
     cache.delete(key)
 
 
-def drop_post_cache(post):
+def delete_post_cache(post):
     """
-    Drops a post specific template  fragment cache.
+    Drops both post specific template fragment caches.
     """
-    drop_cache("post", post.uid)
-
+    delete_fragment_cache("post", True, post.uid)
+    delete_fragment_cache("post", False, post.uid)
+    if post.root:
+        delete_fragment_cache("post", True, post.root.uid)
+        delete_fragment_cache("post", False, post.root.uid)
 
 
 class Post(models.Model):
@@ -122,11 +124,7 @@ class Post(models.Model):
     lastedit_user = models.ForeignKey(User, related_name='editor', null=True,
                                       on_delete=models.CASCADE)
 
-    # The user that last contributed to the thread.
-    last_contributor = models.ForeignKey(User, related_name='contributor', null=True,
-                                         on_delete=models.CASCADE)
-
-    # Store users contributing to the thread as "tags" to preform_search later.
+    # Store users contributing to the thread as "tags" to more_like_this later.
     thread_users = models.ManyToManyField(User, related_name="thread_users")
 
     # Indicates the information value of the post.
@@ -175,10 +173,10 @@ class Post(models.Model):
     sticky = models.BooleanField(default=False)
 
     # This will maintain the ancestor/descendant relationship bewteen posts.
-    root = models.ForeignKey('self', related_name="descendants", null=True, blank=True, on_delete=models.SET_NULL)
+    root = models.ForeignKey('self', related_name="descendants", null=True, blank=True, on_delete=models.CASCADE)
 
     # This will maintain parent/child relationships between posts.
-    parent = models.ForeignKey('self', null=True, blank=True, related_name='children', on_delete=models.SET_NULL)
+    parent = models.ForeignKey('self', null=True, blank=True, related_name='children', on_delete=models.CASCADE)
 
     # This is the text that the user enters.
     content = models.TextField(default='')
@@ -193,7 +191,7 @@ class Post(models.Model):
     tags = TaggableManager()
 
     # What site does the post belong to.
-    site = models.ForeignKey(Site, null=True, on_delete=models.SET_NULL)
+    site = models.ForeignKey(Site, null=True,  on_delete=models.CASCADE)
 
     # Unique id for the post.
     uid = models.CharField(max_length=32, unique=True, db_index=True)
@@ -322,7 +320,6 @@ class Post(models.Model):
 
         self.creation_date = self.creation_date or util.now()
         self.lastedit_date = self.lastedit_date or util.now()
-        self.last_contributor = self.lastedit_user
 
         # Sanitize the post body.
         self.html = markdown.parse(self.content, post=self, clean=True, escape=False)
@@ -333,11 +330,10 @@ class Post(models.Model):
         self.is_toplevel = self.type in Post.TOP_LEVEL
 
         # Drop the cached fragment
-        drop_post_cache(self)
+        delete_post_cache(self)
 
         # This will trigger the signals
         super(Post, self).save(*args, **kwargs)
-
 
     def __str__(self):
         return "%s: %s (pk=%s)" % (self.get_type_display(), self.title, self.pk)
@@ -404,7 +400,7 @@ class Vote(models.Model):
         return u"Vote: %s, %s, %s" % (self.post_id, self.author_id, self.get_type_display())
 
     def save(self, *args, **kwargs):
-        #self.uid = self.uid or f"v{util.get_uuid(limit=5)}"
+        # self.uid = self.uid or f"v{util.get_uuid(limit=5)}"
         self.date = self.date or util.now()
         super(Vote, self).save(*args, **kwargs)
 
@@ -428,7 +424,7 @@ def update_post_views(post, request, timeout=settings.POST_VIEW_TIMEOUT):
     """
 
     # Get the ip.
-    ip = util.get_ip(request)
+    ip = helpers.get_ip(request)
 
     # Keys go by IP and post ip.
     cache_key = f"{ip}-{post.id}"
@@ -448,9 +444,10 @@ def update_post_views(post, request, timeout=settings.POST_VIEW_TIMEOUT):
 
     # Drop the post related cache for logged in users.
     if request.user.is_authenticated:
-        drop_post_cache(post)
+        delete_post_cache(post)
 
     return post
+
 
 class Subscription(models.Model):
     "Connects a post to a user"
@@ -461,6 +458,7 @@ class Subscription(models.Model):
                 Profile.EMAIL_MESSAGE: EMAIL_MESSAGE,
                 Profile.LOCAL_MESSAGE: LOCAL_MESSAGE,
                 Profile.DEFAULT_MESSAGES: LOCAL_MESSAGE}
+
     class Meta:
         unique_together = (("user", "post"))
 
@@ -475,7 +473,7 @@ class Subscription(models.Model):
     def save(self, *args, **kwargs):
         # Set the date to current time if missing.
         self.date = self.date or util.now()
-        #self.uid = self.uid or util.get_uuid(limit=16)
+        # self.uid = self.uid or util.get_uuid(limit=16)
 
         if self.type is None:
             self.type = self.TYPE_MAP.get(self.user.profile.message_prefs, self.NO_MESSAGES)
@@ -533,8 +531,9 @@ class Award(models.Model):
     '''
     badge = models.ForeignKey(Badge, on_delete=models.CASCADE)
     user = models.ForeignKey(User, on_delete=models.CASCADE)
-    post = models.ForeignKey(Post, null=True, on_delete=models.SET_NULL)
+    post = models.ForeignKey(Post, null=True, on_delete=models.CASCADE)
     date = models.DateTimeField()
+
     # context = models.CharField(max_length=1000, default='')
 
     def save(self, *args, **kwargs):
@@ -545,3 +544,45 @@ class Award(models.Model):
     @property
     def uid(self):
         return self.pk
+
+class Log(models.Model):
+    """
+    Represents moderation actions
+    """
+    MODERATE, CREATE, EDIT, LOGIN, LOGOUT, CLASSIFY, DEFAULT = range(7)
+
+    ACTIONS_CHOICES = [
+        (MODERATE, "Moderate"),
+        (CREATE, "Create"),
+        (EDIT, "Edit"),
+        (LOGIN, "Login"),
+        (LOGOUT, "Logout"),
+        (CLASSIFY, "Classify"),
+        (DEFAULT, "Default")
+    ]
+
+    # User that performed the action.
+    user = models.ForeignKey(User, null=True, blank=True, on_delete=models.CASCADE)
+
+    # A potential target user (it may be null)
+    target = models.ForeignKey(User, related_name="target", null=True, blank=True, on_delete=models.CASCADE)
+
+    # Post related information goes here (it may be null).
+    post = models.ForeignKey(Post, null=True, blank=True, on_delete=models.CASCADE)
+
+    # The IP address associated with the log.
+    ipaddr = models.GenericIPAddressField(null=True, blank=True)
+
+    # Actions that the user took.
+    action = models.IntegerField(choices=ACTIONS_CHOICES, default=DEFAULT, db_index=True)
+
+    # The logging information.
+    text = models.TextField(null=True, blank=True)
+
+    # Date this log was created.
+    date = models.DateTimeField()
+
+    def save(self, *args, **kwargs):
+        self.date = self.date or util.now()
+        super(Log, self).save(*args, **kwargs)
+

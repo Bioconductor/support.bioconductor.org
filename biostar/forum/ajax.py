@@ -18,9 +18,8 @@ from django.http import JsonResponse
 from whoosh.searching import Results
 
 from biostar.accounts.models import Profile, User
-from . import auth, util, forms, tasks, search, views, const
-from .models import Post, Vote, Subscription
-
+from . import auth, util, forms, tasks, search, views, const, moderate
+from .models import Post, Vote, Subscription, delete_post_cache
 
 def ajax_msg(msg, status, **kwargs):
     payload = dict(status=status, msg=msg)
@@ -28,14 +27,39 @@ def ajax_msg(msg, status, **kwargs):
     return JsonResponse(payload)
 
 
-logger = logging.getLogger("biostar")
+logger = logging.getLogger("engine")
 ajax_success = partial(ajax_msg, status='success')
 ajax_error = partial(ajax_msg, status='error')
 
 MIN_TITLE_CHARS = 10
 MAX_TITLE_CHARS = 180
 
+VOTE_RATE = settings.VOTE_RATE
+EDIT_RATE = settings.EDIT_RATE
+SUBS_RATE = settings.SUBS_RATE
+DIGEST_RATE = settings.DIGEST_RATE
+
 RATELIMIT_KEY = settings.RATELIMIT_KEY
+
+
+def ajax_limited(key, rate):
+    """
+    Make a blocking rate limiter that does not raise an exception
+    """
+    def outer(func):
+
+        @ratelimit(key=key, rate=rate)
+        def inner(request, **kwargs):
+
+            was_limited = getattr(request, 'limited', False)
+            if was_limited:
+                return ajax_error(msg="Too many requests from same IP address. Temporary ban.")
+
+            return func(request, **kwargs)
+
+        return inner
+
+    return outer
 
 
 class ajax_error_wrapper:
@@ -86,14 +110,9 @@ def user_image(request, username):
     return redirect(gravatar_url)
 
 
-@ratelimit(key=RATELIMIT_KEY, rate='100/h')
-@ratelimit(key=RATELIMIT_KEY, rate='25/m')
+@ajax_limited(key=RATELIMIT_KEY, rate=VOTE_RATE)
 @ajax_error_wrapper(method="POST")
 def ajax_vote(request):
-    was_limited = getattr(request, 'limited', False)
-
-    if was_limited:
-        return ajax_error(msg="Too many votes from same IP address. Temporary ban.")
 
     user = request.user
     type_map = dict(upvote=Vote.UP, bookmark=Vote.BOOKMARK, accept=Vote.ACCEPT)
@@ -119,88 +138,41 @@ def ajax_vote(request):
 
     msg, vote, change = auth.apply_vote(post=post, user=user, vote_type=vote_type)
 
+    # Expire post cache upon vote.
+    delete_post_cache(post)
+
     return ajax_success(msg=msg, change=change)
 
 
-def validate_drop(request):
-    """
-    Vaildates drag and drop and makes
-    """
+@ajax_limited(key=RATELIMIT_KEY, rate=EDIT_RATE)
+@ajax_error_wrapper(method="POST", login_required=True)
+def drag_and_drop(request):
+
     parent_uid = request.POST.get("parent", '')
     uid = request.POST.get("uid", '')
     user = request.user
     parent = Post.objects.filter(uid=parent_uid).first()
     post = Post.objects.filter(uid=uid).first()
 
-    if not post:
-        msg = "Post does not exist."
-        return False, msg
+    # Parent is root when dropping to a new answer.
+    parent = post.root if (parent_uid == "NEW" and post) else parent
 
-    if parent_uid == "NEW":
-        return True, "Valid drop."
-
-    if not parent:
-        msg = "Parent needs to be provided."
-        return False, msg
-
-    if not (user.profile.is_moderator or post.author == user):
-        msg = "Only moderators or the author can move posts."
-        return False, msg
-
-    children = set()
-    auth.walk_down_thread(parent=post, collect=children)
-
-    if parent == post or (parent in children) or parent.root != post.root:
-        msg = "Can not move post here."
-        return False, msg
-
-    if post.is_toplevel:
-        msg = "Top level posts can not be moved."
-        return False, msg
-
-    return True, "Valid drop"
-
-
-@ratelimit(key=RATELIMIT_KEY, rate='50/h')
-@ratelimit(key=RATELIMIT_KEY, rate='10/m')
-@ajax_error_wrapper(method="POST", login_required=True)
-def drag_and_drop(request):
-    was_limited = getattr(request, 'limited', False)
-    if was_limited:
-        return ajax_error(msg="Too many request from same IP address. Temporary ban.")
-
-    parent_uid = request.POST.get("parent", '')
-    uid = request.POST.get("uid", '')
-
-    parent = Post.objects.filter(uid=parent_uid).first()
-    post = Post.objects.filter(uid=uid).first()
-    post_type = Post.COMMENT
-
-    valid, msg = validate_drop(request)
+    valid = auth.validate_move(user=user, source=post, target=parent)
     if not valid:
-        return ajax_error(msg=msg)
+        return ajax_error(msg="Invalid Drop")
 
     # Dropping comment as a new answer
     if parent_uid == "NEW":
-        parent = post.root
-        post_type = Post.ANSWER
+        url = auth.move_to_answer(request=request, post=post)
+    else:
+        url = auth.move_post(request=request, post=post, parent=parent)
 
-    Post.objects.filter(uid=post.uid).update(type=post_type, parent=parent)
-
-    post.update_parent_counts()
-    redir = post.get_absolute_url()
-
-    return ajax_success(msg="success", redir=redir)
+    return ajax_success(msg="success", redir=url)
 
 
-@ratelimit(key=RATELIMIT_KEY, rate='50/h')
-@ratelimit(key=RATELIMIT_KEY, rate='10/m')
+@ajax_limited(key=RATELIMIT_KEY, rate=SUBS_RATE)
 @ajax_error_wrapper(method="POST")
 def ajax_subs(request):
-    was_limited = getattr(request, 'limited', False)
-
-    if was_limited:
-        return ajax_error(msg="Too many request from same IP address. Temporary ban.")
 
     type_map = dict(messages=Subscription.LOCAL_MESSAGE, email=Subscription.EMAIL_MESSAGE,
                     unfollow=Subscription.NO_MESSAGES)
@@ -219,14 +191,12 @@ def ajax_subs(request):
     return ajax_success(msg="Changed subscription.")
 
 
-@ratelimit(key=RATELIMIT_KEY, rate='50/h')
-@ratelimit(key=RATELIMIT_KEY, rate='10/m')
+@ajax_limited(key=RATELIMIT_KEY, rate=DIGEST_RATE)
 @ajax_error_wrapper(method="POST")
 def ajax_digest(request):
-    was_limited = getattr(request, 'limited', False)
+
     user = request.user
-    if was_limited:
-        return ajax_error(msg="Too many request from same IP address. Temporary ban.")
+
     type_map = dict(daily=Profile.DAILY_DIGEST, weekly=Profile.WEEKLY_DIGEST,
                     monthly=Profile.MONTHLY_DIGEST)
     if user.is_anonymous:
@@ -238,80 +208,6 @@ def ajax_digest(request):
     Profile.objects.filter(user=user).update(digest_prefs=pref)
 
     return ajax_success(msg="Changed digest options.")
-
-
-def validate_recaptcha(token):
-    """
-    Send recaptcha token to API to check if user response is valid
-    """
-    url = 'https://www.google.com/recaptcha/api/siteverify'
-    values = {
-        'secret': settings.RECAPTCHA_PRIVATE_KEY,
-        'response': token
-    }
-    data = urlencode(values).encode("utf-8")
-    response = builtin_request.urlopen(url, data)
-    result = json.load(response)
-
-    if result['success']:
-        return True, ""
-
-    return False, "Invalid reCAPTCHA. Please try again."
-
-
-def validate_toplevel_fields(fields={}):
-    """Validate fields found in top level posts"""
-
-    title = fields.get('title', '')
-    tag_list = fields.get('tag_list', [])
-    tag_val = fields.get('tag_val', '')
-    post_type = fields.get('post_type', '')
-    title_length = len(title.replace(' ', ''))
-    allowed_types = [opt[0] for opt in Post.TYPE_CHOICES]
-    tag_length = len(tag_list)
-
-    if title_length <= forms.MIN_CHARS:
-        msg = f"Title too short, please add more than {forms.MIN_CHARS} characters."
-        return False, msg
-
-    if title_length > forms.MAX_TITLE:
-        msg = f"Title too long, please add less than {forms.MAX_TITLE} characters."
-        return False, msg
-
-    if post_type not in allowed_types:
-        msg = "Not a valid post type."
-        return False, msg
-    if tag_length > forms.MAX_TAGS:
-        msg = f"Too many tags, maximum of {forms.MAX_TAGS} tags allowed."
-        return False, msg
-
-    if len(tag_val) > 100:
-        msg = f"Tags have too many characters, maximum of 100 characters total allowed in tags."
-        return False, msg
-
-    return True, ""
-
-
-def validate_post_fields(fields={}, is_toplevel=False):
-    """
-    Validate fields found in dictionary.
-    """
-    content = fields.get('content', '')
-    content_length = len(content.replace(' ', ''))
-
-    # Validate fields common to all posts.
-    if content_length <= forms.MIN_CHARS:
-        msg = f"Content too short, please add more than {forms.MIN_CHARS} characters."
-        return False, msg
-    if content_length > forms.MAX_CONTENT:
-        msg = f"Content too long, please add less than {forms.MAX_CONTENT} characters."
-        return False, msg
-
-    # Validate fields found in top level posts
-    if is_toplevel:
-        return validate_toplevel_fields(fields=fields)
-
-    return True, ""
 
 
 def get_fields(request, post=None):
@@ -336,57 +232,54 @@ def get_fields(request, post=None):
     return fields
 
 
-@ratelimit(key=RATELIMIT_KEY, rate='50/h')
-@ratelimit(key=RATELIMIT_KEY, rate='10/m')
-@ajax_error_wrapper(method="POST", login_required=True)
-def ajax_edit(request, uid):
-    """
-    Edit post content using ajax.
-    """
-    was_limited = getattr(request, 'limited', False)
-    if was_limited:
-        return ajax_error(msg="Too many request from same IP address. Temporary ban.")
-
-    post = Post.objects.filter(uid=uid).first()
-    if not post:
-        return ajax_error(msg="Post does not exist")
-
-    # Get the fields found in the request
-    fields = get_fields(request=request, post=post)
-
-    if not (request.user.profile.is_moderator or request.user == post.author):
-        return ajax_error(msg="Only moderators or the author can edit posts.")
-
-    # Validate fields in request.POST
-    valid, msg = validate_post_fields(fields=fields, is_toplevel=post.is_toplevel)
-    if not valid:
-        return ajax_error(msg=msg)
+def set_post(post, user, fields):
 
     # Set the fields for this post.
     if post.is_toplevel:
         post.title = fields.get('title', post.title)
         post.type = fields.get('post_type', post.type)
         post.tag_val = fields.get('tag_val', post.tag_val)
-    post.lastedit_user = request.user
+
+    post.lastedit_user = user
     post.lastedit_date = util.now()
     post.content = fields.get('content', post.content)
     post.save()
 
-    # Get the newly set tags to render
-    tags = post.tag_val.split(",")
-    context = dict(post=post, tags=tags, show_views=True)
-    tmpl = loader.get_template('widgets/post_tags.html')
-    tag_html = tmpl.render(context)
+    return post
 
-    # Get the newly updated user line
-    context = dict(post=post, avatar=post.is_comment)
-    tmpl = loader.get_template('widgets/post_user_line.html')
-    user_line = tmpl.render(context)
 
-    # Prepare the new title to render
-    new_title = f'{post.get_type_display()}: {post.title}'
+@ajax_limited(key=RATELIMIT_KEY, rate=EDIT_RATE)
+@ajax_error_wrapper(method="POST", login_required=True)
+def ajax_edit(request, uid):
+    """
+    Edit post content using ajax.
+    """
 
-    return ajax_success(msg='success', html=post.html, title=new_title, user_line=user_line, tag_html=tag_html)
+    post = Post.objects.filter(uid=uid).first()
+    user = request.user
+    can_edit = (user.profile.is_moderator or user == post.author)
+
+    if not post:
+        return ajax_error(msg="Post does not exist")
+
+    if not can_edit:
+        return ajax_error(msg="Only moderators or the author can edit posts.")
+
+    # Get the fields found in the request
+    fields = get_fields(request=request, post=post)
+
+    # Pick the form
+    if post.is_toplevel:
+        form = forms.PostLongForm(post=post, user=user, data=fields)
+    else:
+        form = forms.PostShortForm(post=post, user=user, data=fields)
+
+    if form.is_valid():
+        post = set_post(post, user, form.cleaned_data)
+        return ajax_success(msg='Edited post', redirect=post.get_absolute_url())
+    else:
+        msg = [field.errors for field in form if field.errors]
+        return ajax_error(msg=msg)
 
 
 @ajax_error_wrapper(method="POST", login_required=True)
@@ -401,18 +294,14 @@ def ajax_delete(request):
     if not (user.profile.is_moderator or post.author == user):
         return ajax_error(msg="Only moderators and post authors can delete.")
 
-    url, msg = auth.delete_post(post=post, user=user)
+    url = moderate.delete_post(post=post, request=request)
 
-    return ajax_success(msg=msg, url=url)
+    return ajax_success(msg="post deleted", url=url)
 
 
-@ratelimit(key=RATELIMIT_KEY, rate='50/h')
-@ratelimit(key=RATELIMIT_KEY, rate='10/m')
+@ajax_limited(key=RATELIMIT_KEY, rate=EDIT_RATE)
 @ajax_error_wrapper(method="POST")
 def ajax_comment_create(request):
-    was_limited = getattr(request, 'limited', False)
-    if was_limited:
-        return ajax_error(msg="Too many request from same IP address. Temporary ban.")
 
     # Fields common to all posts
     user = request.user
@@ -423,21 +312,20 @@ def ajax_comment_create(request):
     if not parent:
         return ajax_error(msg='Parent post does not exist.')
 
-    fields = dict(content=content, user=user, parent=parent)
+    fields = dict(content=content, parent_uid=parent_uid)
 
-    # Validate the fields
-    valid, msg = validate_post_fields(fields=fields, is_toplevel=False)
-    if not valid:
+    form = forms.PostShortForm(post=parent, user=user, data=fields)
+
+    if form.is_valid():
+        # Create the comment.
+        post = Post.objects.create(type=Post.COMMENT, content=content, author=user, parent=parent)
+        return ajax_success(msg='Created post', redirect=post.get_absolute_url())
+    else:
+        msg = [field.errors for field in form if field.errors]
         return ajax_error(msg=msg)
 
-    # Create the comment.
-    post = Post.objects.create(type=Post.COMMENT, content=content, author=user, parent=parent)
 
-    return ajax_success(msg='Created post', redirect=post.get_absolute_url())
-
-
-@ratelimit(key=RATELIMIT_KEY, rate='50/h')
-@ratelimit(key=RATELIMIT_KEY, rate='20/m')
+@ajax_limited(key=RATELIMIT_KEY, rate=EDIT_RATE)
 @ajax_error_wrapper(method="GET")
 def handle_search(request):
     """
@@ -446,16 +334,18 @@ def handle_search(request):
 
     query = request.GET.get('query')
     if query:
-        users = list(User.objects.filter(username__icontains=query).values_list('username', flat=True)[:20])
+        users = User.objects.filter(profile__handle__icontains=query
+                                    ).values_list('profile__handle', flat=True
+                                                  ).order_by('profile__score')
     else:
-        users = list(User.objects.order_by('profile__score').values_list('username', flat=True)[:20])
+        users = User.objects.order_by('profile__score').values_list('profile__handle', flat=True)
 
+    users = list(users[:20])
     # Return list of users matching username
     return ajax_success(users=users, msg="Username searched")
 
 
-@ratelimit(key=RATELIMIT_KEY, rate='50/h')
-@ratelimit(key=RATELIMIT_KEY, rate='10/m')
+@ajax_limited(key=RATELIMIT_KEY, rate=EDIT_RATE)
 @ajax_error_wrapper(method="GET")
 def inplace_form(request):
     """
@@ -507,9 +397,8 @@ def similar_posts(request, uid):
     results = cache.get(cache_key)
 
     if results is None:
-        logger.info("Setting similar posts cache.")
-        results = search.preform_search(query=post.uid, fields=['uid'], sortedby=["lastedit_date"],
-                                        more_like_this=True)
+        logger.debug("Setting similar posts cache.")
+        results = search.more_like_this(uid=post.uid)
         # Set the results cache for 1 hour
         cache.set(cache_key, results, 3600)
 

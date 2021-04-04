@@ -7,7 +7,6 @@ from biostar.accounts import views
 account_patterns = [
     # Get the reset/ urls
     path('', views.listing, name="accounts_index"),
-    path('admin/', admin.site.urls, name='django_admin'),
 
     path(r'password/reset/', views.password_reset, name='password_reset'),
     path(r'password/reset/done/', views.password_reset_done, name='password_reset_done'),
@@ -34,10 +33,6 @@ account_patterns = [
     # Message urls
     path(r'inbox/', views.message_list, name='inbox'),
 
-    # Loggin view
-    path(r'view/logs/', views.view_logs, name='view_logs'),
-
-
     # External url login
     path(r'external/', views.external_login, name="external"),
 
@@ -50,6 +45,9 @@ account_patterns = [
 urlpatterns = [
 
     path("", include(account_patterns)),
+
+    # Add admin urls.
+    path('admin/', admin.site.urls),
 
 ]
 

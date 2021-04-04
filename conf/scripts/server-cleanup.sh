@@ -3,6 +3,8 @@
 # Load the conda commands.
 source ~/miniconda3/etc/profile.d/conda.sh
 
+cd /export/www/biostar-central/
+
 export POSTGRES_HOST=/var/run/postgresql
 
 # Activate the conda environemnt.
@@ -12,3 +14,6 @@ conda activate engine
 export DJANGO_SETTINGS_MODULE=conf.run.site_settings
 
 python manage.py cleanup
+
+# Clear site sessions
+python manage.py clearsessions

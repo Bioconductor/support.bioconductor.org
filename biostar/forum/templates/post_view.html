@@ -2,29 +2,37 @@
 {% load forum_tags %}
 {% load static %}
 
+{% block title %}
+    {{ post.title }}
+{% endblock %}
+
+
 {% block headtitle %}
     {{ post.title }}
 {% endblock %}
 
-    <script async src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
-    <script async src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+<script async src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
+<script async src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
 
 {% block body %}
 
-    {%  include "banners/insert-post-top.html" %}
+    {% include "banners/insert-post-top.html" %}
 
+<span itemprop="mainEntity" itemscope itemtype="https://schema.org/Question">
     {# The toplevel post #}
     <div class="ui vertical segment">
-        {% post_body post=post user=request.user tree=tree %}
+            {% post_body post=post user=request.user tree=tree %}
     </div>
 
     {# Render each answer for the post #}
     {% for answer in answers %}
         <div class="ui vertical segment">
-            {% post_body post=answer user=request.user tree=tree %}
+                {% post_body post=answer user=request.user tree=tree %}
         </div>
     {% endfor %}
+
+</span>
 
     {# Display the newanswer form #}
     {% if request.user.is_authenticated and post.is_open %}
@@ -91,21 +99,22 @@
 
     </script>
 
-
 {% endblock %}
 
 {% block sidebar %}
 
     {#  Cache every hour #}
+    <div class="ui large wrap-text" id="sidebar">
 
-    <b>Similar Posts </b>
+        <div class="title">Similar Posts</div>
 
-    <div class="ui basic segment similar" id="similar">
-        <div id="similar-feed" post_uid="{{ post.uid }}"></div>
-        <div class="ui inverted dimmer">
-            <div class="content">
-                <div class="ui text loader">
-                    <div class="muted">Loading Similar Posts</div>
+        <div class="ui basic segment similar" id="similar">
+            <div id="similar-feed" post_uid="{{ post.uid }}"></div>
+            <div class="ui inverted dimmer">
+                <div class="content">
+                    <div class="ui text loader">
+                        <div class="muted">Loading Similar Posts</div>
+                    </div>
                 </div>
             </div>
         </div>

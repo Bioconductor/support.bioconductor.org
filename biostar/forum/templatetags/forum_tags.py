@@ -1,29 +1,25 @@
-import hashlib
+import datetime
 import itertools
 import logging
-import random
-import re
 import os
-
-import datetime
-from itertools import count, islice
+import random
 from datetime import timedelta
-from django.db.models import Count
+from itertools import count, islice
+
 import bleach
-from taggit.models import Tag
 from django import template, forms
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.core.paginator import Paginator
+from django.db.models import Count
 from django.shortcuts import reverse
-from django.db.models import Q
 from django.utils.safestring import mark_safe
 from django.utils.timezone import utc
-from django.core.paginator import Paginator
-from django.core.cache import cache
+from taggit.models import Tag
 
-from biostar.forum import markdown
 from biostar.accounts.models import Profile, Message
 from biostar.forum import const, auth
+from biostar.forum import markdown
 from biostar.forum.models import Post, Vote, Award, Subscription, Badge
 
 User = get_user_model()
@@ -52,13 +48,17 @@ ICON_MAP = dict(
     tagged="tags icon",
 )
 
+@register.inclusion_tag('widgets/count_badge.html')
+def count_badge(count):
 
-def get_count(request, key, default=0):
-    """
-    Returns a count stored in the session.
-    """
-    value = request.session.get(const.COUNT_DATA_KEY, {}).get(key, default)
-    return value
+    try:
+        count = int(count)
+    except ValueError as exc:
+        # TODO: this is to catch ongoing stale sessions, may be removed later
+        logger.info(f"invalid count (stale session?) {count}")
+        count = 0
+
+    return dict(count=count)
 
 
 @register.simple_tag(takes_context=True)
@@ -67,6 +67,7 @@ def activate(context, state, target):
     label = "active" if state in targets else ""
 
     return label
+
 
 @register.simple_tag()
 def vote_icon(vote):
@@ -94,34 +95,9 @@ def bignum(number):
     return str(number)
 
 
-@register.simple_tag(takes_context=True)
-def counts(context):
-
-    request = context['request']
-    vcounts = get_count(request, 'vote_count') or 0
-    mcounts = get_count(request, 'message_count') or 0
-    votes = dict(count=vcounts)
-    messages = dict(count=mcounts)
-
-    return dict(votes=votes, messages=messages)
-
-
-@register.inclusion_tag('search/search_pages.html', takes_context=True)
-def pages_search(context, results):
-
-    previous_page = results.pagenum - 1
-    next_page = results.pagenum + 1 if not results.is_last_page() else results.pagenum
-    request = context['request']
-    query = request.GET.get('query', '')
-    context = dict(results=results, previous_page=previous_page, query=query,
-                   next_page=next_page)
-
-    return context
-
-
-@register.inclusion_tag('widgets/post_details.html')
-def post_details(post, user, avatar=True):
-    return dict(post=post, user=user, avatar=avatar)
+@register.inclusion_tag('widgets/post_details.html', takes_context=True)
+def post_details(context, post, user, avatar=True):
+    return dict(post=post, user=user, avatar=avatar, context=context)
 
 
 @register.simple_tag
@@ -136,7 +112,6 @@ def now():
 
 @register.simple_tag
 def gravatar(user=None, user_uid=None, size=80):
-    hasattr(user, 'profile')
     if user_uid and hasattr(user, 'profile'):
         user = User.objects.filter(profile__uid=user_uid).first()
 
@@ -146,12 +121,16 @@ def gravatar(user=None, user_uid=None, size=80):
 @register.inclusion_tag('widgets/filter_dropdown.html', takes_context=True)
 def filter_dropdown(context):
 
+    request = context['request']
+    order = request.GET.get("order", 'rank') or 'rank'
+    limit = request.GET.get("limit", 'all') or 'all'
+    # TODO will be refactored out.
+    context.update(dict(order=order, limit=limit))
     return context
 
 
 @register.inclusion_tag('widgets/user_icon.html', takes_context=True)
 def user_icon(context, user=None, is_moderator=False, is_spammer=False, score=0):
-
     try:
         is_moderator = user.profile.is_moderator if user else is_moderator
         score = user.profile.get_score() if user else score * 10
@@ -200,7 +179,6 @@ def user_card(context, target):
 
 @register.inclusion_tag('widgets/post_user_box.html', takes_context=True)
 def post_user_box(context, target_user, post):
-
     context.update(dict(target_user=target_user, post=post))
     return context
 
@@ -215,7 +193,6 @@ def post_actions(context, post, label="ADD COMMENT", author=None, lastedit_user=
 
 @register.inclusion_tag('widgets/post_tags.html')
 def post_tags(post=None, post_uid=None, show_views=False, tags_str='', spaced=True):
-
     if post_uid:
         post = Post.objects.filter(uid=post_uid).first()
 
@@ -262,7 +239,6 @@ def toggle_unread(user):
 
 @register.simple_tag(takes_context=True)
 def digest_label(context, post):
-
     user = context['request'].user
     no_digest = 'No digest'
 
@@ -309,7 +285,7 @@ def inplace_type_field(post=None, field_id='type'):
     choices = [opt for opt in Post.TYPE_CHOICES]
 
     choices = filter(lambda opt: (opt[1] in settings.ALLOWED_POST_TYPES) if settings.ALLOWED_POST_TYPES else
-                                 (opt[0] in Post.TOP_LEVEL), choices)
+    (opt[0] in Post.TOP_LEVEL), choices)
 
     post_type = forms.IntegerField(label="Post Type",
                                    widget=forms.Select(choices=choices, attrs={'class': "ui fluid dropdown",
@@ -371,10 +347,7 @@ def get_dropdown_options(selected_list):
         query = Tag.objects.exclude(name__in=selected_list)[:limit].values_list("name", flat=True)
         opts = {(name.strip(), False) for name in query}
 
-    # Chain the selected and rest of the options
-    opts = itertools.chain(selected, opts)
-
-    return opts
+    return selected
 
 
 @register.inclusion_tag('forms/field_tags.html', takes_context=True)
@@ -383,9 +356,8 @@ def tags_field(context, form_field, initial=''):
 
     # Get currently selected tags from the post or request
     selected = initial.split(",") if initial else []
-    options = get_dropdown_options(selected_list=selected)
 
-    context = dict(initial=initial, form_field=form_field, dropdown_options=options)
+    context = dict(initial=initial, form_field=form_field, dropdown_options=selected)
 
     return context
 
@@ -421,13 +393,6 @@ def post_body(context, post, user, tree):
 
 
 @register.filter
-def get_award_context(award):
-    post = award.post
-    context = f"For : <a href={post.get_absolute_url()}>{post.title}</a>" if post else ""
-    return context
-
-
-@register.filter
 def get_user_location(user):
     return user.profile.location or "location unknown"
 
@@ -439,18 +404,12 @@ def get_last_login(user):
     return f"{time_ago(user.profile.date_joined)}"
 
 
-@register.filter
-def highlight(hit, field):
-    lit = hit.highlights(field, top=5)
-    return mark_safe(lit) if len(lit) else hit[field]
-
-
 @register.inclusion_tag('widgets/feed_custom.html')
-def custom_feed(objs, feed_type='', title=''):
+def custom_feed(objs, ftype='', title=''):
     users = ()
-    if feed_type == 'messages':
+    if ftype == 'messages':
         users = set(m.sender for m in objs)
-    if feed_type in ['following', 'bookmarks', 'votes']:
+    if ftype in ['follow', 'bookmark', 'votes']:
         users = set(o.author for o in objs)
 
     context = dict(users=users, title=title)
@@ -479,12 +438,12 @@ def get_post_list(target, request, show=None):
     # Show a specific post listing.
     show_map = dict(questions=Post.QUESTION, tools=Post.TOOL, news=Post.NEWS,
                     blogs=Post.BLOG, tutorials=Post.TUTORIAL, answers=Post.ANSWER,
-                    comments=Post.COMMENT)
+                    comments=Post.COMMENT, forum=Post.FORUM)
 
     type_filter = show_map.get(show)
     posts = posts.filter(type=type_filter) if type_filter is not None else posts
 
-    posts = posts.select_related("root").select_related( "author__profile", "lastedit_user__profile")
+    posts = posts.select_related("root").select_related("author__profile", "lastedit_user__profile")
     posts = posts.order_by("-rank")
 
     # Cache the users posts add pagination to posts.
@@ -495,7 +454,7 @@ def get_post_list(target, request, show=None):
 
 
 def awards_feed():
-    awards = Award.objects.order_by('-pk').select_related("badge", "user", "user__profile")
+    awards = Award.objects.order_by('-pk').select_related("badge", "user", "user__profile")[:300]
     # Store already seen users
     seen = set()
     # Aggregate list of shown awards
@@ -512,7 +471,6 @@ def awards_feed():
 
 @register.inclusion_tag('widgets/feed_default.html')
 def default_feed(user):
-
     recent_votes = Vote.objects.filter(post__status=Post.OPEN,
                                        post__root__status=Post.OPEN).prefetch_related("post")
     recent_votes = recent_votes.order_by("-pk")[:settings.VOTE_FEED_COUNT]
@@ -537,7 +495,6 @@ def default_feed(user):
 
 @register.simple_tag
 def planet_gravatar(planet_author):
-
     email = planet_author.replace(' ', '')
     email = f"{email}@planet.org"
     email = email.encode('utf-8')
@@ -595,37 +552,48 @@ def get_wording(filtered, prefix="Sort by:", default=""):
 
 @register.simple_tag
 def activate_check_mark(filter, active):
-
     if filter == active:
         return 'check icon'
 
     return ''
 
 
-@register.simple_tag
-def relative_url(value, field_name, urlencode=None):
+@register.simple_tag(takes_context=True)
+def relative_url(context, value, field_name, urlencode=None):
     """
     Updates field_name parameters in url with new value
     """
-    # Create preform_search string with updated field_name, value pair.
+    # Check if the param is in biggest common set.
+    expect = const.ALLOWED_PARAMS
+
+    def apply_filter(param):
+        key = param.split('=')[0]
+        # Return parameter if in valid const.
+        if key != field_name and key in expect:
+            return param
+
+    request = context['request']
+    # Create more_like_this string with updated field_name, value pair.
     url = f'?{field_name}={value}'
     if urlencode:
-        # Split preform_search string
+        # Split query string
         querystring = urlencode.split('&')
-        # Exclude old value 'field_name' from preform_search string
-        filter_func = lambda p: p.split('=')[0] != field_name
-        filtered_querystring = filter(filter_func, querystring)
+        # Exclude old value 'field_name' from query string
+        filtered = filter(apply_filter, querystring)
         # Join the filtered string
-        encoded_querystring = '&'.join(filtered_querystring)
-        # Update preform_search string
-        url = f'{url}&{encoded_querystring}'
+        encoded = '&'.join(filtered)
+        # Update query string
+        encoded = f'&{encoded}' if encoded else ''
+        url = f'{url}{encoded}'
+
+    # Concatenate current path to relative query string
+    url = request.path + url
 
     return url
 
 
 @register.simple_tag
 def get_thread_users(users, post, limit=2):
-
     displayed_users = {post.author, post.lastedit_user or post.author}
 
     for user in users:
@@ -711,7 +679,6 @@ def bignum(number):
 
 
 def post_boxclass(root_type, answer_count, root_has_accepted):
-
     # Create the css class for each row
     if root_type == Post.JOB:
         style = "job"
@@ -746,7 +713,6 @@ def search_boxclass(root_type, answer_count, root_has_accepted):
 
 @register.simple_tag
 def boxclass(post=None, uid=None):
-
     return post_boxclass(root_type=post.root.type,
                          answer_count=post.root.answer_count,
                          root_has_accepted=post.root.has_accepted)
@@ -830,7 +796,7 @@ def markdown_file(pattern):
 
 
 class MarkDownNode(template.Node):
-    #CALLBACKS = [top_level_only]
+    # CALLBACKS = [top_level_only]
 
     def __init__(self, nodelist):
         self.nodelist = nodelist
@@ -838,7 +804,7 @@ class MarkDownNode(template.Node):
     def render(self, context):
         text = self.nodelist.render(context)
         text = markdown.parse(text, clean=False, escape=False, allow_rewrite=True)
-        #text = bleach.linkify(text, callbacks=self.CALLBACKS, skip_tags=['pre'])
+        # text = bleach.linkify(text, callbacks=self.CALLBACKS, skip_tags=['pre'])
         return text
 
 

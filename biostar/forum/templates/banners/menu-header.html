@@ -1,8 +1,7 @@
 {% load forum_tags %}
 {% load static %}
 
-
-<div class="ui small borderless menu" id="topicbar">
+<div class="ui borderless menu" id="topicbar">
 
     <a class="item {% activate tab "latest" %} " href="{% url 'post_list' %}">
         <i class="list icon"></i> Latest
@@ -11,10 +10,10 @@
     <a class="item {% activate tab "news" %} " href="{% url 'post_topic' 'news' %}">
         <i class="newspaper icon"></i> News
     </a>
-    <a class="item {% activate tab "job" %} " href="{% url 'post_topic' 'jobs' %}">
+    <a class="item {% activate tab "jobs" %} " href="{% url 'post_topic' 'jobs' %}">
         <i class="briefcase icon"></i> Jobs
     </a>
-    <a class="item {% activate tab "tutorial" %} " href="{% url 'post_topic' 'tutorials' %}">
+    <a class="item {% activate tab "tutorials" %} " href="{% url 'post_topic' 'tutorials' %}">
         <i class="help circle icon"></i> Tutorials
     </a>
     <a class="item {% activate tab "forum" %} " href="{% url 'post_topic' 'forum' %}">
@@ -29,8 +28,11 @@
         <i class="info circle icon"></i>About
     </a>
 
-</div>
+        <a class="item  {% activate tab "faq" %}" href="/info/faq/">
+        <i class="info recycle icon"></i>FAQ
+    </a>
 
+</div>
 
 <div class="ui labeled icon top attached evenly divided menu" id="menu-header" user-id="{{ request.user.id }}">
 
@@ -46,15 +48,15 @@
     </a>
 
     <a class="item {% activate tab "planet" %} " href="{% url 'blog_list' %}">
-        <i class="rss icon"></i> Planet
+        <i class="rss icon"></i> Planet  {% count_badge counts.planet_count %}
     </a>
 
     {% if request.user.profile.is_moderator %}
         <a class="item {% activate tab 'spam' %} " href="{% url 'post_topic' 'spam' %}">
-            <i class="bug icon"></i> Spam
+            <i class="bug icon"></i> Spam  {% count_badge counts.spam_count %}
         </a>
         <a class="item {% activate tab 'activity' %} " href="{% url 'view_logs' %}">
-            <i class="arrow alternate circle down icon"></i> Mods
+            <i class="chess queen icon"></i> Mods {% count_badge counts.mod_count %}
         </a>
     {% endif %}
 

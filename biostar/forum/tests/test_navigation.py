@@ -40,7 +40,7 @@ class ForumNavigation(TestCase):
         c.login(username=self.owner.username, email='tested@tested.com', password='tested')
         for url in urls:
             print(url)
-            resp = c.get(url, data={"q":"tested"})
+            resp = c.get(url)
             code = resp.status_code
             if code not in codes:
                 # We already know it is an error.
@@ -59,6 +59,14 @@ class ForumNavigation(TestCase):
             reverse("myposts"),
             reverse("myvotes"),
             reverse('api_traffic'),
+            reverse('latest_feed'),
+            reverse('latest_feed'),
+            reverse('post_tags', kwargs=dict(tag='tag1')),
+            reverse('tag_feed', kwargs=dict(text='tag1')),
+            reverse('post_feed', kwargs=dict(text=self.post.uid)),
+            reverse('post_type', kwargs=dict(text="job")),
+
+            reverse('user_feed', kwargs=dict(text=self.owner.username)),
             reverse('api_user', kwargs=dict(uid=self.owner.profile.uid)),
             reverse('api_post', kwargs=dict(uid=self.post.uid)),
             reverse('api_vote', kwargs=dict(uid=self.vote.pk)),

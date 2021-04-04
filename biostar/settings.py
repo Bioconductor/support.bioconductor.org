@@ -7,32 +7,16 @@ import os
 # The logging configuration
 from biostar.logconf import LOGGING
 
+
 # Helper function for building absolute paths.
 def join(*args):
     return os.path.abspath(os.path.join(*args))
 
 
-# Run tasks in multi threaded mode when UWSGI is not installed.
-MULTI_THREAD = True
-
-# A setting to disable tasks altoghether.
-DISABLE_TASKS = False
-
 # Pagedown
 PAGEDOWN_IMAGE_UPLOAD_ENABLED = False
 
-
-LANGUAGE_DETECTION = ["af", "ar", "bg",
-                      "bn", "ca", "cs", "cy",
-                      "da", "de", "el", "en",
-                      "es", "et", "fa", "fi", "fr",
-                      "gu", "he", "hi", "hr", "hu", "id",
-                      "it", "ja", "kn", "ko", "lt", "lv",
-                      "mk", "ml", "mr", "ne", "nl", "no", "pa",
-                      "pl", "pt", "ro", "ru", "sk", "sl", "so", "sq",
-                      "sv", "sw", "ta", "te", "th", "tl", "tr",
-                      "uk", "ur", "vi", "zh-cn", "zh-tw"]
-
+LANGUAGE_DETECTION = ["en"]
 
 # Set the home page to the engine or forum
 INTERNAL_IPS = ['127.0.0.1']
@@ -45,9 +29,7 @@ ADMINS = [
 DEFAULT_ADMIN_PASSWORD = "admin@localhost"
 
 # Allowed CORS websites
-CORS_ORIGIN_WHITELIST = [
-    'https://view.qiime2.org',
-]
+CORS_ORIGIN_WHITELIST = []
 
 POSTGRES_HOST = os.environ.setdefault("POSTGRES_HOST", "")
 
@@ -59,6 +41,9 @@ DEFAULT_FROM_EMAIL = ADMIN_EMAIL
 
 # The default no reply email.
 DEFAULT_NOREPLY_EMAIL = ADMIN_EMAIL
+
+# Email used to send errors to ADMINS
+SERVER_EMAIL = ADMIN_EMAIL
 
 FROM_EMAIL_PATTERN = "%s <%s>"
 
@@ -90,8 +75,7 @@ DEFAULT_APPS = [
     'compressor',
     'taggit',
     'snowpenguin.django.recaptcha2',
-    'django_celery_results',
-    'django_celery_beat'
+
 ]
 
 # Enabled apps.
@@ -124,10 +108,14 @@ SECRET_KEY = 'secret-key'
 # Change this in production!
 API_KEY = "api-key"
 
+# Used during testing
+#TEMPLATE_DIRS = [os.path.join(BASE_DIR, 'themes', 'biostar')]
+
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
         'APP_DIRS': True,
+        #'DIRS': TEMPLATE_DIRS,
         'OPTIONS': {
             'string_if_invalid': "**MISSING**",
             'context_processors': [
@@ -139,6 +127,7 @@ TEMPLATES = [
                 'biostar.context.main',
             ],
         },
+
     },
 ]
 
@@ -159,7 +148,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 ]
 
-# Database settings.
+# Database directory.
 # https://docs.djangoproject.com/en/1.11/ref/settings/#databases
 DATABASE_DIR = os.path.join(BASE_DIR, 'export', 'db')
 
@@ -178,7 +167,6 @@ DATABASES = {
 
 ALLOWED_HOSTS = ['www.lvh.me', 'localhost', '127.0.0.1']
 
-
 # The URL configuration.
 ROOT_URLCONF = 'biostar.urls'
 
@@ -194,15 +182,6 @@ USE_L10N = True
 
 USE_TZ = True
 
-# Key used to set ratelimitter.
-# https://django-ratelimit.readthedocs.io/en/stable/security.html
-# another option: 'ip'
-RATELIMIT_KEY = "header:x-real-ip"
-
-
-# Configure language detection
-#LANGUAGE_DETECTION = ['en']
-
 # The static URL start.
 STATIC_URL = '/static/'
 
@@ -213,7 +192,6 @@ STATIC_ROOT = join(BASE_DIR, 'export', 'static')
 STATICFILES_DIRS = [
     join(BASE_DIR, "biostar", "static"),
 ]
-
 
 # The media URL start.
 MEDIA_URL = '/media/'
@@ -233,13 +211,12 @@ STATICFILES_FINDERS = [
 # Apply default logger setting.
 LOGGER_NAME = "biostar"
 
+# Valid options; block, disabled, threaded, uwsgi, celery.
+TASK_RUNNER = 'block'
 
-TASKS_CELERY = False
+TASK_MODULES = []
 
 # The email delivery engine.
-#EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
-#EMAIL_BACKEND = 'sparkpost.django.email_backend.SparkPostEmailBackend'
-
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
 # Session engine.
@@ -247,3 +224,6 @@ SESSION_ENGINE = "django.contrib.sessions.backends.db"
 
 # Session key name.
 SESSION_KEY = "session"
+
+# Session key to keep track of counts
+SESSION_COUNT_KEY = "counts"
