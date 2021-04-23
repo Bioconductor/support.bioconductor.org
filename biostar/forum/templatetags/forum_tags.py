@@ -16,9 +16,12 @@ from django.shortcuts import reverse
 from django.utils.safestring import mark_safe
 from django.utils.timezone import utc
 from taggit.models import Tag
+from re import IGNORECASE, compile, escape
+import html2markdown
 
 from biostar.accounts.models import Profile, Message
 from biostar.forum import const, auth
+from biostar.utils import helpers
 from biostar.forum import markdown
 from biostar.forum.models import Post, Vote, Award, Subscription, Badge
 
@@ -94,6 +97,9 @@ def bignum(number):
         pass
     return str(number)
 
+@register.filter
+def htmltomarkdown(text):
+    return helpers.htmltomarkdown(text)
 
 @register.inclusion_tag('widgets/post_details.html', takes_context=True)
 def post_details(context, post, user, avatar=True):
@@ -368,7 +374,7 @@ def form_errors(form, wmd_prefix='', override_content=False):
     """
 
     try:
-        errorlist = [('', message) for message in form.non_field_errors()]
+        errorlist = [('', message, '') for message in form.non_field_errors()]
         for field in form:
             for error in field.errors:
                 # wmd_prefix is required when dealing with 'content' field.
@@ -412,6 +418,17 @@ def custom_feed(objs, ftype='', title=''):
         users = set(o.author for o in objs)
 
     context = dict(users=users, title=title)
+    return context
+
+
+@register.inclusion_tag(takes_context=True, filename='search/search_pages.html')
+def search_pages(context, results):
+    previous_page = results.pagenum - 1
+    next_page = results.pagenum + 1 if not results.is_last_page() else results.pagenum
+    request = context['request']
+    query = request.GET.get('query', '')
+    order = request.GET.get('order', 'relevance')
+    context = dict(results=results, previous_page=previous_page, query=query,next_page=next_page, order=order)
     return context
 
 
