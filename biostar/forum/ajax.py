@@ -129,7 +129,10 @@ def ajax_vote(request):
     if post.author == user and vote_type == Vote.UP:
         return ajax_error("You can not upvote your own post.")
 
-    if post.author == user and vote_type == Vote.ACCEPT:
+    # Can not accept if user wrote the answer and not top level post.
+    not_allowed = post.author == user and not post.root.author == user
+
+    if vote_type == Vote.ACCEPT and not_allowed:
         return ajax_error("You can not accept your own post.")
 
     not_moderator = user.is_authenticated and not user.profile.is_moderator
@@ -137,7 +140,6 @@ def ajax_vote(request):
         return ajax_error("Only moderators or the person asking the question may accept answers.")
 
     msg, vote, change = auth.apply_vote(post=post, user=user, vote_type=vote_type)
-
     # Expire post cache upon vote.
     delete_post_cache(post)
 
@@ -383,6 +385,26 @@ def inplace_form(request):
     form = tmpl.render(context)
 
     return ajax_success(msg="success", inplace_form=form)
+
+
+@ajax_error_wrapper(method="POST",)
+def email_disable(request, uid):
+
+    target = User.objects.filter(pk=uid).first()
+
+    if not (target.profile.is_staff or target.profile.is_superuser) or target.pk != request.user.pk:
+        return ajax_error(msg="You can not preform this action")
+
+    # Disable watched tags
+    profile = Profile.objects.filter(pk=target.pk).first()
+
+    profile.watched_tags = ''
+    profile.email_verified = False
+    profile.message_prefs = Profile.NO_MESSAGES
+    profile.digest_prefs = Profile.NO_DIGEST
+    profile.save()
+
+    auth.db_logger(user=request.user, target=target, text='disabled emails')
 
 
 def similar_posts(request, uid):

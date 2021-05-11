@@ -60,8 +60,8 @@ function remove_trigger() {
 function highlight(text) {
 
     var con = markdownit({
-        // ESCAPES when html=true
-        html: true,
+        // escape html in previews with html=false.
+        html: false,
         highlight: function (str, lang) {
             if (lang && hljs.getLanguage(lang)) {
                 try {
@@ -96,6 +96,35 @@ function moderate(uid, container, url) {
     //page.show(1000)
     //alert("GGG")
 
+
+}
+
+
+function disable_emails(user_id, elem){
+
+    var url = '/email/disable/{0}/'.format(user_id);
+    $.ajax(url, {
+        type: 'POST',
+        dataType: 'json',
+        ContentType: 'application/json',
+
+        success: function (data) {
+            if (data.status === 'error') {
+
+                popup_message(elem, data.msg, data.status);
+                return
+            }
+
+            // Success
+            popup_message(elem, data.msg, data.status);
+
+
+        },
+        error: function (xhr, status, text) {
+            //icon.toggleClass("on");
+            error_message(vote_elem, xhr, status, text)
+        }
+    });
 
 }
 
@@ -179,8 +208,9 @@ function tags_dropdown() {
             var field = $(this).find("select").data("value");
             var tag_field = $('#{0}'.f(field));
             // Add selected tag to field
+            // Set text instead of value
+            value = $('<div/>').text(value).html();
             tag_field.val(value);
-
         }
     });
     $('.tags > input.search').keydown(function (event) {
@@ -191,8 +221,10 @@ function tags_dropdown() {
 
         // Get a list of delimiters
         var delimiters = $('#field-tags').data('delimiters').split(',');
-        if (delimiters.indexOf(ek) !== -1) {
 
+        if (delimiters.indexOf(String(ek)) !== -1) {
+            // Escape the text before settings value.
+            value = $('<div/>').text(value).html();
             event.preventDefault();
             $(this).closest('.tags').dropdown('set selected', value);
             $(this).val('');
@@ -246,6 +278,24 @@ $(document).ready(function () {
         highligh_preview(form, text);
 
     });
+
+    $("#wmd-button-bar").click(function (event) {
+        var form = $(this).closest('form');
+        var text = form.find('textarea').val();
+        highligh_preview(form, text);
+
+    });
+
+    $("body").on("click", '.pagedown-image-upload.show .submit-input', function () {
+
+        var form = $(this).closest('form');
+        setTimeout(
+            function () {
+                var text = form.find('textarea').val();
+                highligh_preview(form, text);
+            }, 500);
+    });
+
     $('#subscribe').dropdown();
 
     $(this).unbind("click").on('click', '#subscribe .item', function (event) {
@@ -263,6 +313,14 @@ $(document).ready(function () {
         var container = profile.find("#mod");
         var url = '/accounts/moderate/{0}/'.format(uid);
         moderate(uid, container, url)
+
+    });
+    $(".profile .disable-email").click(function (event) {
+        event.preventDefault();
+        var profile = $(this).closest('.profile');
+        var uid = profile.data("value");
+
+        disable_emails(uid, elem)
 
     });
     $(".post .moderate").click(function (event) {
