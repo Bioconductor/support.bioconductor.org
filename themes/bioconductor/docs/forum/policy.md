@@ -14,7 +14,7 @@ about this site or the content available here. We are not responsible for the
 content on this site, your use of the site, or the conduct of others on the
 site. Please read our privacy policy.
 
-### Privay policy
+### Privacy policy
 
 This site is part of the Bioconductor project for the statistical analysis and
 comprehension of high-throughput genomic data. The site collects name and
