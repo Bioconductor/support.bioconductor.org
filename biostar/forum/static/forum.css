@@ -21,6 +21,7 @@
     --post-title-shadow: rgba(0, 0, 0, 0.1);
     --post-title-border: #ececec;
     --popover-color: #3c763d;
+    --herald-color:#df6cbc;
     --on-color: green;
     --disabled: red;
     --popover-error-background: #f2dede;
@@ -70,6 +71,17 @@
     width: 80%;
 }
 
+.ui.items>.item>.content> .mini.header{
+    font-size: 1.15em;
+}
+
+hr {
+    border: 0;
+    height: 0;
+    border-top: 1px solid rgba(0, 0, 0, 0.1);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+}
+
 /* Needed for syntax highlighting */
 :not(pre) > code {
     color: orangered !important;
@@ -104,6 +116,7 @@ blockquote.twitter-tweet {
     background: white;
 }
 
+
 #topicbar {
     border: none;
     border-radius: 0;
@@ -135,6 +148,9 @@ tr.message > td{
 / / background-color: var(--logo-background);
 }
 
+.links-form{
+    display: none;
+}
 
 .message td {
     padding-bottom: 0ex !important;
@@ -322,8 +338,8 @@ i.icon {
 }
 
 .user_box {
-    width: 150px;
-    margin: 0em 0em 0.5em 0.5em;
+    width: 140px;
+    margin: 0em 0em 0em 0em;
     padding: 10px 0px 10px 0px;
     background-color: var(--user-box-backgound);
     font-size: small;
@@ -537,6 +553,17 @@ i.icon {
 .draggable {
     cursor: pointer;
     font-size: 85%;
+}
+
+.diffs > .diff {
+    font-family: monospace;
+
+}
+
+.diffs > .context {
+    padding-top: 1em;
+    padding-bottom: 1em;
+    color: var(--muted-color);
 }
 
 .voteicon {
@@ -780,9 +807,17 @@ img {
     color: var(--label-color);
 }
 
+.herald-sub{
+    cursor: pointer;
+}
 
 .ui.forum.label {
     background-color: var(--forum-background);
+    color: var(--label-color);
+}
+
+.ui.herald.label {
+    background-color: var(--herald-color);
     color: var(--label-color);
 }
 

@@ -132,6 +132,14 @@ def markdown(text):
 
     return html
 
+def get_tags_widget(attrs=None):
+    attrs = attrs or {}
+
+    if settings.DROPDOWN_TAGS:
+        return forms.HiddenInput()
+    else:
+        return forms.TextInput(attrs=attrs)
+
 
 class EditProfile(forms.Form):
 
@@ -184,12 +192,12 @@ class EditProfile(forms.Form):
                                                  initial=self.user.profile.my_tags, validators=[valid_tag],
                                                  help_text="""
                                   Add a tag by typing a word then adding a comma or press ENTER or SPACE.
-                                  """, widget=forms.HiddenInput())
+                                  """, widget=get_tags_widget())
         self.fields['watched_tags'] = forms.CharField(label="Watched tags", max_length=500, required=False,
                                                       help_text="""
                                   Add a tag by typing a word then adding a comma or press ENTER or SPACE.
-                                  """, widget=forms.HiddenInput(),
-                                                      initial=self.user.profile.watched_tags, validators=[valid_tag])
+                                  """,initial=self.user.profile.watched_tags, validators=[valid_tag],
+                                  widget=get_tags_widget())
 
     def clean_handle(self):
 

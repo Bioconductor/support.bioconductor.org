@@ -3,7 +3,8 @@ import logging
 import re
 import urllib.parse as urlparse
 from datetime import timedelta
-
+from difflib import Differ, SequenceMatcher, HtmlDiff, unified_diff
+import bs4
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
@@ -15,13 +16,13 @@ from django.conf import settings
 
 from biostar.accounts.const import MESSAGE_COUNT
 from biostar.accounts.models import Message
-from biostar.planet.models import BlogPost
+from biostar.planet.models import BlogPost, Blog
 # Needed for historical reasons.
 from biostar.accounts.models import Profile
 from biostar.utils.helpers import get_ip
 from . import util, awards
 from .const import *
-from .models import Post, Vote, Subscription, Badge, delete_post_cache, Log
+from .models import Post, Vote, Subscription, Badge, delete_post_cache, Log, SharedLink, Diff
 
 User = get_user_model()
 
@@ -67,7 +68,8 @@ def delete_cache(prefix, user):
 
 import datetime
 
-ICONS = [ "monsterid", "robohash", "wavatar", "retro"]
+ICONS = ["monsterid", "robohash", "wavatar", "retro"]
+
 
 def gravatar_url(email, style='mp', size=80, force=None):
     global ICONS
@@ -208,11 +210,18 @@ def create_post_from_json(**json_data):
     return
 
 
-def create_post(author, title, content, root=None, parent=None, ptype=Post.QUESTION, tag_val=""):
+def create_post(author, title, content, request=None, root=None, parent=None, ptype=Post.QUESTION, tag_val="",
+                nodups=True):
     # Check if a post with this exact content already exists.
-    post = Post.objects.filter(content=content, author=author, is_toplevel=True).first()
-    if post:
-        logger.info("Post with this content already exists.")
+    post = Post.objects.filter(content=content, author=author).order_by('-creation_date').first()
+
+    # How many seconds since the last post should we disallow duplicates.
+    frame = 60
+    delta = (util.now() - post.creation_date).seconds if post else frame
+
+    if nodups and delta < frame:
+        if request:
+            messages.warning(request, "Post with this content was created recently.")
         return post
 
     post = Post.objects.create(title=title, content=content, root=root, parent=parent,
@@ -220,6 +229,81 @@ def create_post(author, title, content, root=None, parent=None, ptype=Post.QUEST
 
     delete_cache(MYPOSTS, author)
     return post
+
+
+def diff_ratio(text1, text2):
+
+    # Do not match on spaces
+    s = SequenceMatcher(lambda char: re.match(r'\w+', char), text1, text2)
+    return round(s.ratio(), 5)
+
+
+def create_diff(text, post, user):
+    """
+    Compute and return Diff object for diff between text and post.content
+    """
+
+    # Skip on post creation
+    if not post:
+        return
+
+    ratio = diff_ratio(text1=text, text2=post.content)
+
+    # Skip no changes detected
+    if ratio == 1:
+        return
+
+    # Compute diff between text and post.
+    content = post.content.splitlines()
+    text = text.splitlines()
+
+    diff = unified_diff(content, text)
+    diff = [f"{line}\n" if not line.endswith('\n') else line for line in diff]
+    diff = ''.join(diff)
+
+    # See if a diff has been made by this user in the past 10 minutes
+    dobj = Diff.objects.filter(post=post, author=post.author).first()
+
+    # 10 minute time frame between
+    frame = 60 * 10
+    delta = (util.now() - dobj.created).seconds if dobj else frame
+
+    # Create diff object within time frame or the person editing is a mod.
+    if delta >= frame or user != post.author:
+        # Create diff object for this user.
+        dobj = Diff.objects.create(diff=diff, post=post, author=user)
+        post.has_diff = True
+        # Only log when anyone but the author commits changes.
+        if user != post.author:
+            db_logger(user=user, action=Log.EDIT, text=f'edited post', target=post.author, post=post)
+
+    Post.objects.filter(pk=post.pk).update(has_diff=post.has_diff)
+
+    return dobj
+
+
+def merge_profiles(main, alias):
+    """
+    Merge alias profile into main
+    """
+
+    # Transfer posts
+    Post.objects.filter(author=alias).update(author=main)
+    Post.objects.filter(lastedit_user=alias).update(lastedit_user=main)
+
+    # Transfer messages
+    Message.objects.filter(sender=alias).update(sender=main)
+    Message.objects.filter(recipient=alias).update(recipient=main)
+
+    # Do not delete older accounts.
+    older = (alias.profile.date_joined < main.profile.date_joined)
+
+    if alias.profile.is_moderator or alias.profile.high_rep or older:
+        return
+
+    alias.delete()
+
+    return
 
 
 def create_subscription(post, user, sub_type=None, update=False):

@@ -1,25 +1,12 @@
 {% load forum_tags %}
 {% load static %}
 
-
-<link href="{% static 'pagedown.css' %}" type="text/css" media="all" rel="stylesheet">
-<link href="{% static 'pagedown/demo/browser/demo.css' %}" type="text/css" media="all" rel="stylesheet">
-
-<script type="text/javascript" src="{% static 'pagedown/Markdown.Converter.js' %}"></script>
-<script type="text/javascript" src="{% static 'pagedown-extra/pagedown/Markdown.Converter.js' %}"></script>
-<script type="text/javascript" src="{% static 'pagedown/Markdown.Sanitizer.js' %}"></script>
-<script type="text/javascript" src="{% static 'pagedown/Markdown.Editor.js' %}"></script>
-<script type="text/javascript" src="{% static 'pagedown-extra/Markdown.Extra.js' %}"></script>
 <script type="text/javascript" src="{% static 'inplace_pagedown.js' %}{% randparam %}"></script>
 
 
-<script src="{% static 'markdown-it.js' %}"></script>
-<script src="{% static 'effects.js' %}{% randparam %}"></script>
-<script src="{% static 'inplace.js' %}{% randparam %}"></script>
-
 <div class="ui basic form-wrap segment fit" id="inplace">
 
-    <form class="ui compact form">
+    <form class="ui compact form" id="form">
         {# Create a new comment #}
         {% if new %}
             <div class="field">
@@ -44,15 +31,16 @@
                 {% if post.is_toplevel %}
                     {% include 'widgets/post_message.html' %}
                 {% endif %}
-
                 {% include 'widgets/textarea.html' %}
-
             </div>
             {# Edit the tags #}
             {% if post.is_toplevel %}
-                <div class="field">
-                    {% tags_field form_field=form.tag_val initial=post.tag_val %}
+             {% block tags_field %}
+                <div class="required field">
+                    {{ form.tag_val }}
+                    <p class="muted">{{ form.tag_val.help_text }}</p>
                 </div>
+              {% endblock %}
             {% endif %}
 
         {% endif %}
@@ -70,8 +58,9 @@
             </a>
 
             <a class="ui button cancel">
-                <i class="undo icon"></i>Cancel
+                <i class="x icon"></i>Cancel
             </a>
+
 
             {% if post and not new %}
                 <a class="ui right floated button delete">
@@ -97,8 +86,6 @@
         });
         // initialize autocomplete
         autocomplete_users();
-        // initialize tags dropdown.
-        tags_dropdown();
 
         $(this).on('click', '#inplace .cancel', function () {
             cancel_inplace()
@@ -120,6 +107,17 @@
                 save.click();
             }
         });
+
+        $(this).on('keyup keypress', '#inplace #tag_val', function () {
+
+            // Submit form when pressing enter on tags field.
+            if (event.keyCode === 13 || event.keyCode === 10) {
+                event.preventDefault();
+                var save = $('#inplace').find('.save, .create');
+                save.click();
+            }
+        });
+
         $("body").on("click", '.pagedown-image-upload.show .submit-input', function () {
 
             var form = $(this).closest('form');
@@ -136,7 +134,6 @@
             highligh_preview(form, text);
 
         });
-
+        tags_dropdown();
     })
 </script>
-

@@ -3,23 +3,26 @@ import logging
 import json
 from ratelimit.decorators import ratelimit
 from urllib import request as builtin_request
+from difflib import Differ
 # import requests
 from urllib.parse import urlencode
 from datetime import datetime, timedelta
 from urllib.parse import quote
-
+from django.contrib import messages
+from biostar.emailer.models import EmailGroup, EmailSubscription
 from django.core.cache import cache
 from django.conf import settings
 from django.db.models import Q, Count
 from django.shortcuts import reverse, redirect
 from django.template import loader
 from django.http import JsonResponse
-
+from django.views.decorators.csrf import ensure_csrf_cookie
 from whoosh.searching import Results
 
 from biostar.accounts.models import Profile, User
 from . import auth, util, forms, tasks, search, views, const, moderate
-from .models import Post, Vote, Subscription, delete_post_cache
+from .models import Post, Vote, Subscription, delete_post_cache, SharedLink, Diff
+
 
 
 def ajax_msg(msg, status, **kwargs):
@@ -67,9 +70,10 @@ class ajax_error_wrapper:
     Used as decorator to trap/display  errors in the ajax calls
     """
 
-    def __init__(self, method, login_required=True):
+    def __init__(self, method, login_required=True, is_mod=False):
         self.method = method
         self.login_required = login_required
+        self.is_mod = is_mod
 
     def __call__(self, func, *args, **kwargs):
 
@@ -81,6 +85,9 @@ class ajax_error_wrapper:
 
             if not request.user.is_authenticated and self.login_required:
                 return ajax_error('You must be logged in.')
+
+            if self.is_mod and (request.user.is_anonymous or not request.user.profile.is_moderator):
+                return ajax_error('You must be a moderator to perform this action.')
 
             if request.user.is_authenticated and request.user.profile.is_spammer:
                 return ajax_error('You must be logged in.')
@@ -231,21 +238,6 @@ def get_fields(request, post=None):
     return fields
 
 
-def set_post(post, user, fields):
-    # Set the fields for this post.
-    if post.is_toplevel:
-        post.title = fields.get('title', post.title)
-        post.type = fields.get('post_type', post.type)
-        post.tag_val = fields.get('tag_val', post.tag_val)
-
-    post.lastedit_user = user
-    post.lastedit_date = util.now()
-    post.content = fields.get('content', post.content)
-    post.save()
-
-    return post
-
-
 @ajax_limited(key=RATELIMIT_KEY, rate=EDIT_RATE)
 @ajax_error_wrapper(method="POST", login_required=True)
 def ajax_edit(request, uid):
@@ -273,7 +265,7 @@ def ajax_edit(request, uid):
         form = forms.PostShortForm(post=post, user=user, data=fields)
 
     if form.is_valid():
-        post = set_post(post, user, form.cleaned_data)
+        form.edit()
         return ajax_success(msg='Edited post', redirect=post.get_absolute_url())
     else:
         msg = [field.errors for field in form if field.errors]
@@ -315,11 +307,76 @@ def ajax_comment_create(request):
 
     if form.is_valid():
         # Create the comment.
-        post = Post.objects.create(type=Post.COMMENT, content=content, author=user, parent=parent)
+        post = form.save()
         return ajax_success(msg='Created post', redirect=post.get_absolute_url())
     else:
         msg = [field.errors for field in form if field.errors]
         return ajax_error(msg=msg)
+
+
+@ajax_error_wrapper(method="POST", is_mod=True)
+@ensure_csrf_cookie
+def herald_update(request, pk):
+    """
+    Update the given herald status, moderators action only.
+    """
+
+    herald = SharedLink.objects.filter(pk=pk).first()
+    user = request.user
+
+    if not herald:
+        return ajax_error(msg="Herald not found")
+
+    status = request.POST.get('status')
+    mapper = dict(accept=SharedLink.ACCEPTED, decline=SharedLink.DECLINED)
+    status = mapper.get(status)
+
+    if status is None:
+        return ajax_error(msg="Invalid status.")
+
+    # If herald is already published, do not accept again.
+    if herald.published:
+        return ajax_error(msg=f"submission is already published.")
+
+    # Update fields only when change is detected.
+    if status != herald.status:
+        herald.status = status
+        herald.editor = user
+        herald.lastedit_date = util.now()
+
+    context = dict(story=herald, user=request.user)
+    tmpl = loader.get_template(template_name='herald/herald_item.html')
+    tmpl = tmpl.render(context)
+
+    SharedLink.objects.filter(pk=herald.pk).update(status=herald.status, editor=herald.editor,
+                                                   lastedit_date=herald.lastedit_date)
+
+    logmsg = f"{herald.get_status_display().lower()} herald story {herald.url[:100]}"
+    auth.db_logger(user=herald.editor, target=herald.author, text=logmsg)
+
+    return ajax_success(msg="changed herald state", icon=herald.icon, tmpl=tmpl, state=herald.get_status_display())
+
+
+@ajax_error_wrapper(method="POST", login_required=True)
+@ensure_csrf_cookie
+def herald_subscribe(request):
+    """
+    Toggle user subscription to Biostar Herald.
+    """
+    user = request.user
+
+    # Get the herald email group
+    group = EmailGroup.objects.filter(uid='herald').first()
+    sub = EmailSubscription.objects.filter(email=user.email, group=group)
+
+    if sub:
+        sub.delete()
+        msg = "Unsubscribed to Biostar Herald"
+    else:
+        EmailSubscription.objects.create(email=user.email, group=group)
+        msg = "Subscribed to Biostar Herald"
+
+    return ajax_success(msg=msg)
 
 
 @ajax_limited(key=RATELIMIT_KEY, rate=EDIT_RATE)
@@ -369,7 +426,8 @@ def inplace_form(request):
 
     nlines = post.num_lines(offset=3)
     rows = nlines if nlines >= MIN_LINES else MIN_LINES
-    form = forms.PostLongForm(user=request.user)
+    initial = dict(tag_val=post.tag_val)
+    form = forms.PostLongForm(user=request.user, initial=initial)
 
     content = '' if add_comment else post.content
     context = dict(user=user, post=post, new=add_comment, html=html,
@@ -396,6 +454,30 @@ def email_disable(request, uid):
     Profile.objects.filter(pk=target.pk).first().add_watched()
     auth.db_logger(user=user, target=target, text='Disabled messages')
     return ajax_success(msg='Disabled messages')
+
+
+@ajax_error_wrapper(method="POST", login_required=True)
+def view_diff(request, uid):
+    """
+    View most recent diff to a post.
+    """
+
+    # View most recent diff made to a post
+    post = Post.objects.filter(uid=uid).first()
+
+    diffs = Diff.objects.filter(post=post).order_by('-pk')
+
+    # Post has no recorded changes,
+    if not diffs.exists():
+        return ajax_success(has_changes=False, msg='Post has no recorded changes')
+
+    # Change new line chars to break line tags.
+    context = dict(diffs=diffs)
+    tmpl = loader.get_template(template_name='diff.html')
+    tmpl = tmpl.render(context)
+
+    # Return newly created diff
+    return ajax_success(has_changes=True, msg='Showing changes', diff=tmpl)
 
 
 def similar_posts(request, uid):

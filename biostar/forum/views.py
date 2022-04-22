@@ -14,19 +14,19 @@ from django.http import Http404
 from django.shortcuts import render, redirect, reverse
 from django.views.decorators.csrf import ensure_csrf_cookie
 from taggit.models import Tag
-
+from biostar.planet.models import Blog, BlogPost
 from biostar.accounts.models import Profile
 from biostar.forum import forms, auth, tasks, util, search, models, moderate
 from biostar.forum.const import *
+
 from biostar.forum.models import Post, Vote, Badge, Subscription, Log
-from biostar.utils.decorators import is_moderator, check_params, reset_count
+from biostar.utils.decorators import is_moderator, check_params, reset_count, is_staff, authenticated
 
 User = get_user_model()
 
 logger = logging.getLogger('engine')
 
 RATELIMIT_KEY = settings.RATELIMIT_KEY
-
 
 CREATE_PARAMS = {'title', 'tag_val'}
 CREATE_PARAMS.update(ALLOWED_PARAMS)
@@ -41,6 +41,7 @@ POST_TYPE = dict(
     tools=Post.TOOL,
     news=Post.NEWS,
     pages=Post.PAGE,
+    herald=Post.HERALD
 )
 
 LIMIT_MAP = dict(
@@ -64,18 +65,6 @@ def post_exists(func):
         if not post:
             messages.error(request, "Post does not exist.")
             return redirect(reverse("post_list"))
-        return func(request, **kwargs)
-
-    return _wrapper_
-
-
-def authenticated(func):
-
-    def _wrapper_(request, **kwargs):
-        if request.user.is_anonymous:
-            messages.error(request, "You need to be logged in to view this page.")
-            return redirect(reverse('post_list'))
-
         return func(request, **kwargs)
 
     return _wrapper_
@@ -107,7 +96,7 @@ class CachedPaginator(Paginator):
             value = cache.get(self.cache_key)
             if value is None:
                 value = super(CachedPaginator, self).count
-                #logger.debug(f'setting the cache for "{self.cache_key}"')
+                # logger.debug(f'setting the cache for "{self.cache_key}"')
                 cache.set(self.cache_key, value, self.ttl)
         else:
             value = super(CachedPaginator, self).count
@@ -116,13 +105,12 @@ class CachedPaginator(Paginator):
 
 
 def apply_sort(posts, limit=None, order=None):
-
     # Apply post ordering.
     if ORDER_MAPPER.get(order):
         ordering = ORDER_MAPPER.get(order)
         posts = posts.order_by(ordering)
     else:
-        posts = posts.order_by("-rank")
+        posts = posts.order_by('-rank')
 
     days = LIMIT_MAP.get(limit, 0)
     # Apply time limit if required.
@@ -282,14 +270,14 @@ def release_quar(request, uid):
     return redirect('/')
 
 
-def post_list(request, topic=None, tag="", cutoff=None):
+def post_list(request, topic=None, tag="", cutoff=None, ordering=None):
     """
     Post listing. Filters, orders and paginates posts based on GET parameters.
     """
 
     # Parse the GET parameters for filtering information
     page = request.GET.get('page', 1)
-    order = request.GET.get("order", "rank") or "rank"
+    order = request.GET.get("order", ordering) or 'rank'
     topic = topic or request.GET.get("type", LATEST) or LATEST
     limit = request.GET.get("limit", "all") or "all"
 
@@ -370,8 +358,9 @@ def bookmarks(request):
     Show posts bookmarked by user.
     """
 
-    posts = post_list(request, topic=BOOKMARKS)
+    posts = post_list(request, topic=BOOKMARKS, ordering=VOTE_DATE)
 
+    # Order by vote date.
     context = dict(posts=posts, topic=BOOKMARKS, tab=BOOKMARKS)
     return render(request, template_name="user_bookmarks.html", context=context)
 
@@ -379,7 +368,6 @@ def bookmarks(request):
 @ensure_csrf_cookie
 @authenticated
 def mytags(request):
-
     posts = post_list(request, topic=MYTAGS)
 
     context = dict(posts=posts, topic=MYTAGS, tab=MYTAGS)
@@ -463,7 +451,6 @@ def tags_list(request):
 
 @check_params(allowed=ALLOWED_PARAMS)
 def community_list(request):
-
     page = request.GET.get("page", 1)
     ordering = request.GET.get("order", "visit")
     limit_to = request.GET.get("limit", "time")
@@ -538,6 +525,7 @@ def post_view(request, uid):
         messages.error(request, "Post does not exist.")
         return redirect("post_list")
 
+    # Redirect to post view
     if not post.is_toplevel:
         return redirect(post.get_absolute_url())
 
@@ -549,19 +537,15 @@ def post_view(request, uid):
     form = forms.PostShortForm(user=request.user, post=post)
 
     if request.method == "POST":
-
-        form = forms.PostShortForm(data=request.POST, user=request.user, post=post)
+        form = forms.PostShortForm(data=request.POST, ptype=Post.ANSWER, user=request.user, post=post)
         if form.is_valid():
-            author = request.user
-            content = form.cleaned_data.get("content")
-            answer = auth.create_post(title=post.title, parent=post, author=author,
-                                      content=content, ptype=Post.ANSWER, root=post.root)
+            answer = form.save()
             return redirect(answer.get_absolute_url())
+
         messages.error(request, form.errors)
 
     # Build the comment tree .
     root, comment_tree, answers, thread = auth.post_tree(user=request.user, root=post.root)
-    # user string
 
     # Bump post views.
     models.update_post_views(post=post, request=request, timeout=settings.POST_VIEW_TIMEOUT)
@@ -569,6 +553,7 @@ def post_view(request, uid):
     context = dict(post=root, tree=comment_tree, form=form, answers=answers)
 
     return render(request, "post_view.html", context=context)
+
 
 @check_params(allowed=CREATE_PARAMS)
 @login_required
@@ -594,7 +579,8 @@ def new_post(request):
             content = form.cleaned_data.get("content")
             ptype = form.cleaned_data.get('post_type')
             tag_val = form.cleaned_data.get('tag_val')
-            post = auth.create_post(title=title, content=content, ptype=ptype, tag_val=tag_val, author=author)
+            post = auth.create_post(title=title, content=content, ptype=ptype, tag_val=tag_val, author=author,
+                                    request=request)
 
             tasks.created_post.spool(pid=post.id)
 
@@ -620,14 +606,37 @@ def view_logs(request):
     else:
         logs = Log.objects.filter(pk=0)
 
-    logs = logs.select_related("user", "post", "post__root","user__profile", "target", "target__profile", "post__author")
+    logs = logs.select_related("user", "post", "post__root", "user__profile", "target", "target__profile",
+                               "post__author")
 
     context = dict(logs=logs)
 
     return render(request, "view_logs.html", context=context)
 
+
+@is_staff
+def merge_profile(request):
+    """
+    Merge two profiles into one.
+    """
+
+    user = request.user
+    form = forms.MergeProfiles(user=user)
+
+    if request.method == 'POST':
+        form = forms.MergeProfiles(user=user, data=request.POST)
+
+        if form.is_valid():
+            merged = form.save()
+            messages.success(request, "Merged profiles")
+            return redirect(reverse('user_profile', kwargs=dict(uid=merged.profile.uid)))
+
+    context = dict(form=form)
+    return render(request, "accounts/merge_profile.html", context=context)
+
+
 def error(request):
     """
     Checking error propagation and logging
     """
-    1/0
+    1 / 0

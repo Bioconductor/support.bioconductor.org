@@ -3,7 +3,7 @@ from django.contrib import admin
 from django.conf.urls.static import static
 from django.urls import include, path, re_path  # For django versions from 2.0 and up
 import debug_toolbar
-from biostar.forum import views, moderate
+from biostar.forum import views, moderate, herald
 from biostar.accounts.views import image_upload_view
 from biostar.forum import ajax, api, feed
 import biostar.accounts.views as account_views
@@ -51,6 +51,7 @@ forum_patterns = [
     path('inplace/form/', ajax.inplace_form, name='inplace_form'),
     path('ajax/user/image/<str:username>/', ajax.user_image, name='user_image'),
     path('similar/posts/<str:uid>/', ajax.similar_posts, name='similar_posts'),
+    path('view/diffs/<str:uid>/', ajax.view_diff, name='view_diff'),
     path('email/disable/<int:uid>/', ajax.email_disable, name='email_disable'),
 
     path('moderate/<str:uid>/', moderate.post_moderate, name="post_moderate"),
@@ -81,6 +82,12 @@ forum_patterns = [
     # Error check.
     path(r'error/', views.error, name="error"),
 
+    # Herald url
+    path('herald/', herald.herald_list, name="herald_list"),
+    path('herald/update/<int:pk>/', ajax.herald_update, name="herald_update"),
+    path('herald/publish/', herald.herald_publish, name="herald_publish"),
+    path('herald/subscribe/', ajax.herald_subscribe, name="herald_subscribe"),
+
     # RSS feeds
     path(r'feeds/latest/', feed.LatestFeed(), name='latest_feed'),
     path(r'feeds/tag/<str:text>/', feed.TagFeed(), name='tag_feed'),
@@ -88,6 +95,7 @@ forum_patterns = [
     path(r'feeds/post/<str:text>/', feed.PostFeed(), name='post_feed' ),
     path(r'feeds/type/<str:text>/', feed.PostTypeFeed(), name='post_type'),
     #path(r'^feeds/planet/$', feed.PlanetFeed(), name='planet-feed'),
+    path(r'merge/', views.merge_profile, name="merge_profile"),
 
 ]
 
@@ -113,7 +121,6 @@ urlpatterns = [
     path('admin/', admin.site.urls),
 
 ]
-
 
 if settings.PAGEDOWN_IMAGE_UPLOAD_ENABLED:
 
