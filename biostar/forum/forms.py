@@ -70,6 +70,18 @@ def valid_tag(text):
     if len(words) > MAX_TAGS:
         raise ValidationError('You have too many tags (5 allowed)')
 
+    words = text.split()
+
+    if len(words) > MAX_TAGS:
+        raise ValidationError('You have too many tags (5 allowed)')
+
+MAX_ORD = 383
+
+def validate_ascii(value):
+    for c in value:
+        if ord(c) > MAX_ORD:
+            raise ValidationError(f"Only ASCII characters are allowed. Invalid character {c}, ({ord(c)})")
+
 
 def informative_choices(choices):
     """
@@ -117,6 +129,36 @@ def required_tags(lst):
     return
 
 
+def suspend_user(user):
+
+    # This can be turned on if we want to be stricter
+    if user.profile.trusted:
+        auth.db_logger(user=user, target=user, text=f'NOT insta banned because trusted')
+        #raise forms.ValidationError("Spam words by trusted user.")
+        return
+
+    if user.profile.state == Profile.NEW:
+        user.profile.state = Profile.SUSPENDED
+        user.profile.save()
+        admin = User.objects.filter(is_superuser=True).order_by("pk").first()
+        auth.db_logger(user=admin, target=user, text=f'insta banned')
+        raise forms.ValidationError(f"This account has been suspended")
+
+    #raise forms.ValidationError("Spam words detected in the content")
+    return
+
+
+def spam_check(value, target, user):
+    words = target.split()
+    content = " ".join(value.split())
+    content = content.replace("-", " ")
+    content = content.replace("_", " ")
+    for patt in words:
+        patt = r'%s' % patt
+        if re.search(patt, content, flags=re.IGNORECASE):
+            suspend_user(user)
+
+
 class PostLongForm(forms.Form):
     choices = [opt for opt in Post.TYPE_CHOICES if opt[0] in Post.TOP_LEVEL and opt[0] != Post.HERALD]
 
@@ -129,7 +171,7 @@ class PostLongForm(forms.Form):
                                    widget=forms.Select(choices=choices, attrs={'class': "ui dropdown"}),
                                    help_text="Select a post type.")
     title = forms.CharField(label="Post Title", max_length=200, min_length=2,
-                            validators=[valid_title],
+                            validators=[valid_title, validate_ascii],
                             help_text="Enter a descriptive title to promote better answers.")
     tag_val = forms.CharField(label="Post Tags", max_length=MAX_TAG_LEN, required=True, validators=[valid_tag],
 
@@ -137,7 +179,7 @@ class PostLongForm(forms.Form):
                               help_text="""Create a new tag by typing a word then adding a comma.""")
 
     content = forms.CharField(widget=forms.Textarea,
-                              validators=[valid_language],
+                              validators=[valid_language, validate_ascii],
                               min_length=MIN_CONTENT, max_length=MAX_CONTENT, label="Post Content", strip=False)
 
     def __init__(self, post=None, user=None, *args, **kwargs):
@@ -188,9 +230,15 @@ class PostLongForm(forms.Form):
 
         return tags
 
+    def clean_title(self):
+        title = self.cleaned_data["title"]
+        spam_check(title, user=self.user, target=settings.BANNED_WORDS_TITLE)
+        return title
+
     def clean_content(self):
         content = self.cleaned_data["content"]
         length = len(content.replace(" ", ""))
+        spam_check(content, user=self.user, target=settings.BANNED_WORDS_CONTENT)
 
         if length < MIN_CHARS:
             raise forms.ValidationError(f"Too short, place add more than {MIN_CHARS}")
@@ -200,7 +248,8 @@ class PostLongForm(forms.Form):
 
 class PostShortForm(forms.Form):
     MIN_LEN, MAX_LEN = 10, 10000
-    content = forms.CharField(widget=forms.Textarea, min_length=MIN_LEN, max_length=MAX_LEN, strip=False)
+    content = forms.CharField(widget=forms.Textarea, min_length=MIN_LEN, max_length=MAX_LEN, strip=False,
+                              validators=[valid_language, validate_ascii],)
 
     def __init__(self, post, user=None, request=None, ptype=Post.COMMENT, *args, **kwargs):
         self.user = user
@@ -211,6 +260,7 @@ class PostShortForm(forms.Form):
 
     def clean_content(self):
         content = self.cleaned_data["content"]
+        spam_check(content, user=self.user, target=settings.BANNED_WORDS_CONTENT)
         return content
 
     def clean(self):
