@@ -1,0 +1,17 @@
+{% extends 'post_list.html' %}
+
+{% block title %}
+    Bioconductor {{ topic|capfirst }}
+{% endblock %}
+
+{% block headtitle %}
+    Bioconductor {{ topic|capfirst }}
+{% endblock %}
+
+{% block filtermsg %}
+
+    {% if not topic %}
+        <div class="ui filter message">Topic contains no posts.</div>
+    {% endif %}
+
+{% endblock %}
