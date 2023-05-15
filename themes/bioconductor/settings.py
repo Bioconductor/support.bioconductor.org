@@ -7,7 +7,8 @@ DEBUG = True
 CUSTOM_THEME = os.path.abspath(os.path.join(BASE_DIR, 'themes', 'bioconductor'))
 
 ACCOUNT_EMAIL_SUBJECT_PREFIX = "[bioc] "
-HTTP_PROTOCOL = "http"
+HTTP_PROTOCOL = "https"
+PROTOCOL = "https"
 
 LANGUAGE_DETECTION = ["en"]
 
@@ -18,7 +19,7 @@ TAGS_OPTIONS_FILE = os.path.join(CUSTOM_THEME, 'tags', 'tags.txt')
 # Ensure at least one tag in file is included.
 REQUIRED_TAGS = os.path.join(CUSTOM_THEME, 'tags', 'packageList.txt')
 
-REQUIRED_TAGS_URL = 'http://bioconductor.org/packages/devel/BiocViews.html#___Software'
+REQUIRED_TAGS_URL = 'https://bioconductor.org/packages/devel/BiocViews.html#___Software'
 
 # Rate to limit
 RATELIMIT_RATE = '200/d'
