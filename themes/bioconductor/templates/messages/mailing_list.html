@@ -9,10 +9,10 @@
 
     <p>You are getting this message as part of a mailing list.</p>
 
-    Activity on a post you are following on <a href="http://{{ domain }}">Bioconductor support</a>
+    Activity on a post you are following on <a href="https://{{ domain }}">Bioconductor support</a>
     <p>
-        User <a href="http://{{ domain }}{{ post.author.profile.get_absolute_url }}">{{ post.author.profile.name }}</a> wrote
-        <a href="http://{{ domain }}{{ post.get_absolute_url }}">{{ post.title }}</a>:
+        User <a href="https://{{ domain }}{{ post.author.profile.get_absolute_url }}">{{ post.author.profile.name }}</a> wrote
+        <a href="https://{{ domain }}{{ post.get_absolute_url }}">{{ post.title }}</a>:
     </p>
     <p>
         {{ post.html|safe }}
@@ -20,7 +20,7 @@
 
     <hr>
     <p style="color:#666666">
-        You may visit http://{{ domain }}{{ post.get_absolute_url }}
+        You may visit https://{{ domain }}{{ post.get_absolute_url }}
     </p>
 
     <p>The Bioconductor Team</p>
@@ -37,7 +37,7 @@
 
     {{ post.content|safe }}
 
-    You may visit http://{{ domain }}{{ post.get_absolute_url }}
+    You may visit https://{{ domain }}{{ post.get_absolute_url }}
 
     The Bioconductor Team
 
