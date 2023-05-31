@@ -7,10 +7,10 @@
 
 {% block html %}
 
-    Activity on a tag you are watching on <a href="http://{{ domain }}">Bioconductor support</a>
+    Activity on a tag you are watching on <a href="https://{{ domain }}">Bioconductor support</a>
     <p>
-        User <a href="http://{{ domain }}{{ post.author.profile.get_absolute_url }}">{{ post.author.profile.name }}</a> wrote
-        <a href="http://{{ domain }}{{ post.get_absolute_url }}">{{ post.title|safe }}</a>:
+        User <a href="https://{{ domain }}{{ post.author.profile.get_absolute_url }}">{{ post.author.profile.name }}</a> wrote
+        <a href="https://{{ domain }}{{ post.get_absolute_url }}">{{ post.title|safe }}</a>:
     </p>
     <p>
         {{ post.html|safe }}
@@ -18,7 +18,7 @@
 
     <hr>
     <p style="color:#666666">
-        You may visit http://{{ domain }}{{ post.get_absolute_url }}
+        You may visit https://{{ domain }}{{ post.get_absolute_url }}
     </p>
 
     <p>The Bioconductor Team</p>
@@ -33,7 +33,7 @@
 
     {{ post.content|safe }}
 
-    You may visit http://{{ domain }}{{ post.get_absolute_url }}
+    You may visit https://{{ domain }}{{ post.get_absolute_url }}
 
     The Bioconductor Team
 
