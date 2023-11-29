@@ -28,6 +28,8 @@ After downloading the installation file, run the command ( replace installation_
 Once miniconda has been installed, create a virtual enviroment called `engine`.
 
     $ conda create -n engine python=3.7
+
+Use 'python = 3.8' if using mac osx-arm64
     
 Start the virtual enviorment by entering the command:
 
