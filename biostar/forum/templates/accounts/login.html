@@ -2,6 +2,14 @@
 {% load forum_tags %}
 {% load socialaccount %}
 {% block headtitle %}Login{% endblock %}
+{% load recaptcha2 %}
+
+{% block head %}
+
+    {# Load recaptcha #}
+    {% recaptcha_init %}
+
+{% endblock %}
 
 {% block content %}
 
@@ -52,6 +60,15 @@
                 <label>Password</label>
                 {{ form.password }}
             </div>
+
+            <!-- Add the following block inside the form -->
+            <!-- Add the following block inside the form -->
+            {% if form.captcha %}
+            <div class="field">
+                <label>Captcha</label>
+                {{ form.captcha }}
+            </div>
+            {% endif %}
 
             <div class="field">
                 <button class="ui primary button" type="submit">

@@ -110,7 +110,7 @@ class SignUpForm(forms.Form):
 
         return user
 
-
+#Captcha implementation for signup page
 class SignUpWithCaptcha(SignUpForm):
 
     def __init__(self, *args, **kwargs):
@@ -118,6 +118,10 @@ class SignUpWithCaptcha(SignUpForm):
 
         if settings.RECAPTCHA_PRIVATE_KEY:
             self.fields["captcha"] = ReCaptchaField(widget=ReCaptchaWidget())
+
+#TODO
+#Captcha implementation for login page
+
 
 
 class LogoutForm(forms.Form):
@@ -272,6 +276,13 @@ class EditProfile(forms.Form):
 
 
 class LoginForm(forms.Form):
+
+    def __init__(self, *args, **kwargs):
+        super(LoginForm, self).__init__(*args, **kwargs)
+
+        if settings.RECAPTCHA_PRIVATE_KEY:
+            self.fields["captcha"] = ReCaptchaField(widget=ReCaptchaWidget())
+
     email = forms.CharField(label='Email', max_length=100)
     password = forms.CharField(label='Password', max_length=100,
                                widget=forms.PasswordInput)

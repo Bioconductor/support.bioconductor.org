@@ -53,6 +53,13 @@
                 {{ form.password }}
             </div>
 
+            {% if form.captcha %}
+                <div class="field">
+                    <label>Captcha</label>
+                    {{form.captcha}}
+                </div>
+            {% endif %}
+
             <div class="field">
                 <button class="ui primary button" type="submit">
                     <i class="sign in icon"></i>Log In
