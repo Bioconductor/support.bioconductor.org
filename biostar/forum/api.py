@@ -205,7 +205,7 @@ def api_tag(request, tag):
 
 @json_response
 def user_email(request, email):
-    user = User.objects.filter(email=email.lower())
+    user = User.objects.filter(email__iexact=email.lower())
     if user.exists():
         return True
 
