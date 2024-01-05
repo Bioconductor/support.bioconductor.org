@@ -110,7 +110,7 @@ class SignUpForm(forms.Form):
 
         return user
 
-#Captcha implementation for signup page
+
 class SignUpWithCaptcha(SignUpForm):
 
     def __init__(self, *args, **kwargs):
@@ -119,8 +119,6 @@ class SignUpWithCaptcha(SignUpForm):
         if settings.RECAPTCHA_PRIVATE_KEY:
             self.fields["captcha"] = ReCaptchaField(widget=ReCaptchaWidget())
 
-#TODO
-#Captcha implementation for login page
 
 
 

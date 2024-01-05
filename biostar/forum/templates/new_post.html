@@ -1,6 +1,7 @@
 {% extends "base_view.html" %}
 {% load forum_tags %}
 {% load static %}
+{% load recaptcha2 %}
 
 {%  block title %}
     New Post
@@ -11,6 +12,12 @@
 {% endblock %}
 
 <script async src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
+
+<!-- {% block head %}
+    {# Load recaptcha #}
+    {% recaptcha_init %}
+    <script async src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
+{% endblock %} -->
 
 {% block container %}
     <div class="ui bottom attached create-post segment">
@@ -62,9 +69,12 @@
 
                         <div class="ui preview segment"></div>
 
+                        
+                       
                         {% if form.captcha %}
                             <div class="top-padding">
                                 <div class="required field">
+                                    <label>Captcha</label>
                                     {{ form.captcha }}
                                 </div>
                             </div>
