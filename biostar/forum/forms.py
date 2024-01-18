@@ -179,7 +179,7 @@ class PostLongForm(forms.Form):
                               help_text="""Create a new tag by typing a word then adding a comma.""")
 
     content = forms.CharField(widget=forms.Textarea,
-                              validators=[valid_language, validate_ascii],
+                              validators=[validate_ascii],
                               min_length=MIN_CONTENT, max_length=MAX_CONTENT, label="Post Content", strip=False)
 
     def __init__(self, post=None, user=None, *args, **kwargs):
@@ -252,7 +252,7 @@ class PostLongForm(forms.Form):
 class PostShortForm(forms.Form):
     MIN_LEN, MAX_LEN = 10, 10000
     content = forms.CharField(widget=forms.Textarea, min_length=MIN_LEN, max_length=MAX_LEN, strip=False,
-                              validators=[valid_language, validate_ascii],)
+                              validators=[validate_ascii],)
 
     def __init__(self, post, user=None, request=None, ptype=Post.COMMENT, *args, **kwargs):
         self.user = user
