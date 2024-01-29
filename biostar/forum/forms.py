@@ -187,9 +187,6 @@ class PostLongForm(forms.Form):
         self.user = user
         super(PostLongForm, self).__init__(*args, **kwargs)
 
-        if settings.RECAPTCHA_PRIVATE_KEY:
-            self.fields["captcha"] = ReCaptchaField(widget=ReCaptchaWidget())
-
     def edit(self):
         """
         Edit an existing post.
