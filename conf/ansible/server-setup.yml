@@ -40,7 +40,7 @@
       authorized_key:
         user: www
         state: present
-        key: "{{ lookup('file', lookup('env','HOME') + '/.ssh/id_rsa.pub') }}"
+        key: "{{ lookup('file', lookup('env','HOME') + '/.ssh/support-clone-2022.pub') }}"
 
     - name: Install required packages
       become: yes
