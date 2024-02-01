@@ -5,3 +5,7 @@
    2) Permission issue: login as root
    3) run "pip install -r conf/requirements.txt"
    4) run the script
+4) Handling the hosts.ini file: 
+   1) getting rid of the file hosts.ini file
+   2) since we are using one target add the host into the ansible scripts itself
+5) 
