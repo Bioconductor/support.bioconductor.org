@@ -145,7 +145,8 @@
       args:
         executable: /bin/bash
         chdir: "{{ engine_dir }}"
-
+   
+    #TODO need to write new script. (Handled manually)
     - name: Create the first data migration.
       shell: "./server-migrate.sh"
       args:
