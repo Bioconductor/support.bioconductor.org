@@ -1,5 +1,6 @@
 import logging
 from biostar.forum.settings import *
+import boto3
 #from biostar.recipes.settings import *
 
 logger = logging.getLogger("biostar")
@@ -7,8 +8,16 @@ logger = logging.getLogger("biostar")
 # Debugging flag.
 DEBUG = True
 
+AWS_PARAMETER_PATH = '/bioc/biostar/site_secrets'
+
+if AWS_PARAMETER_PATH:
+    ssm_client = boto3.client('ssm')
+    plist = ssm_client.get_parameters_by_path(Path=AWS_PARAMETER_PATH, Recursive=True)
+    param_dict = {item["Name"][len(AWS_PARAMETER_PATH) + 1:]: item["Value"] for item in plist["Parameters"]}
+
+
 # Set your known secret key here.
-SECRET_KEY = "secretkey"
+SECRET_KEY = param_dict.get("SECRET_KEY")
 
 # Admin users will be created automatically with DEFAULT_ADMIN_PASSWORD.
 ADMINS = [
@@ -19,13 +28,14 @@ ADMINS = [
 DEFAULT_ADMIN_PASSWORD = SECRET_KEY
 
 # Set the site domain.
-SITE_DOMAIN = "foo.com"
+SITE_DOMAIN = param_dict.get("SITE_DOMAIN")
+
 
 SITE_ID = 1
 HTTP_PORT = ''
 PROTOCOL = 'http'
 
-ALLOWED_HOSTS = [SITE_DOMAIN]
+ALLOWED_HOSTS = param_dict.get("ALLOWED_HOSTS")
 
 DATABASE_NAME = "biostardb"
 

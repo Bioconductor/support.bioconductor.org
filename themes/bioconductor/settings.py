@@ -1,6 +1,7 @@
 from biostar.forum.settings import *
 import os
 from biostar.forum.settings import BASE_DIR
+from conf.site.site_settings import *
 
 DEBUG = True
 
@@ -101,11 +102,11 @@ DEFAULT_NOREPLY_EMAIL = "noreply@bioconductor.org"
 SEARCH_LIMIT = 60
 
 # On deployed servers the following must be set.
-EMAIL_HOST = ""
-EMAIL_PORT = ""
-EMAIL_HOST_USER = ""
-EMAIL_HOST_PASSWORD = ""
-EMAIL_USE_TLS = False
+EMAIL_HOST = param_dict.get("EMAIL_HOST")
+EMAIL_PORT = param_dict.get("EMAIL_PORT")
+EMAIL_HOST_USER = param_dict.get("EMAIL_HOST_USER")
+EMAIL_HOST_PASSWORD = param_dict.get("EMAIL_HOST_PASSWORD")
+EMAIL_USE_TLS = param_dict.get("EMAIL_USE_TLS")
 
 AWS_ACCESS_KEY_ID = ''
 AWS_SECRET_ACCESS_KEY = ''
