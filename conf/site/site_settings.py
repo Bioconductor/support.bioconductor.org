@@ -1,7 +1,15 @@
 import logging
 from biostar.forum.settings import *
 import boto3
-#from biostar.recipes.settings import *
+
+import os
+import uuid
+import requests
+import platform
+
+from biostar.settings import *
+from themes.bioconductor.settings import *
+
 
 logger = logging.getLogger("biostar")
 
@@ -17,7 +25,7 @@ if AWS_PARAMETER_PATH:
 
 
 # Set your known secret key here.
-SECRET_KEY = param_dict.get("SECRET_KEY")
+SECRET_KEY = str(uuid.uuid4())
 
 # Admin users will be created automatically with DEFAULT_ADMIN_PASSWORD.
 ADMINS = [
@@ -28,17 +36,30 @@ ADMINS = [
 DEFAULT_ADMIN_PASSWORD = SECRET_KEY
 
 # Set the site domain.
-SITE_DOMAIN = param_dict.get("SITE_DOMAIN")
+try:
+    SITE_DOMAIN = requests.get('https://checkip.amazonaws.com').text.strip()
+except Exception as err:
+    SITE_DOMAIN = platform.node()
 
 
 SITE_ID = 1
 HTTP_PORT = ''
 PROTOCOL = 'http'
 
-ALLOWED_HOSTS = param_dict.get("ALLOWED_HOSTS")
 
+ALLOWED_HOSTS = [SITE_DOMAIN]
+
+LOGIN_APPS = [
+
+    'allauth.socialaccount.providers.twitter',
+    'allauth.socialaccount.providers.persona',
+    'allauth.socialaccount.providers.facebook',
+    'allauth.socialaccount.providers.stackexchange',
+]
+INSTALLED_APPS = DEFAULT_APPS + FORUM_APPS + PAGEDOWN_APP + PLANET_APPS + ACCOUNTS_APPS + LOGIN_APPS + EMAILER_APP
+
+STRICT_TAGS = False
 DATABASE_NAME = "biostardb"
-
 DATABASES = {
 
     'default': {
@@ -53,11 +74,6 @@ DATABASES = {
 
 WSGI_APPLICATION = 'conf.run.site_wsgi.application'
 
-# Valid options; block, disable, threaded, uwsgi, celery.
-TASK_RUNNER = 'block'
-
-SESSION_COOKIE_SECURE = True
-
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 
 try:
@@ -68,4 +84,40 @@ try:
 except ImportError as exc:
     logger.warn(f"No secrets module could be imported: {exc}")
 
-logger.debug(f"SITE_DOMAIN: {SITE_DOMAIN}")
+TEMPLATE_DIRS = [os.path.join(BASE_DIR, 'templates'), os.path.join(CUSTOM_THEME, 'templates')]
+
+TEMPLATES = [
+    {
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',
+        'DIRS': TEMPLATE_DIRS,
+        #'APP_DIRS': True,
+        'OPTIONS': {
+            'string_if_invalid': "**MISSING**",
+            'context_processors': [
+                'django.contrib.auth.context_processors.auth',
+                'django.template.context_processors.debug',
+                'django.template.context_processors.request',
+                'django.template.context_processors.media',
+                'django.contrib.messages.context_processors.messages',
+                'biostar.context.main',
+                'biostar.forum.context.forum'
+            ],
+            'loaders': [
+                ('django.template.loaders.cached.Loader', [
+                   'django.template.loaders.filesystem.Loader',
+                    'django.template.loaders.app_directories.Loader',
+                ])
+            ]
+        },
+    },
+]
+
+
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.memcached.MemcachedCache',
+        'LOCATION': '127.0.0.1:11211',
+    }
+}
+
+print(DATABASE_NAME, "DATABASENAME")
