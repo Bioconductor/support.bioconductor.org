@@ -1,3 +1,6 @@
+import os
+import uuid
+import requests
 import logging
 from biostar.forum.settings import *
 import boto3
