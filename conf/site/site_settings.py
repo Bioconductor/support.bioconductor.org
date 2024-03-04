@@ -63,6 +63,8 @@ INSTALLED_APPS = DEFAULT_APPS + FORUM_APPS + PAGEDOWN_APP + PLANET_APPS + ACCOUN
 
 STRICT_TAGS = False
 DATABASE_NAME = "biostardb"
+POSTGRES_HOST = os.environ.setdefault("POSTGRES_HOST", '/var/run/postgresql/')
+
 DATABASES = {
 
     'default': {
@@ -70,7 +72,7 @@ DATABASES = {
         'NAME': DATABASE_NAME,
         'USER': '',
         'PASSWORD': '',
-        'HOST': '/var/run/postgresql/',
+        'HOST': POSTGRES_HOST,
         'PORT': '',
     },
 }
