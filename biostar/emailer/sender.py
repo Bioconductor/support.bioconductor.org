@@ -131,7 +131,7 @@ def send_mass_html_mail(subject, message, message_html, from_email, recipient_li
         msg = EmailMultiAlternatives(subject=subject,
                                      body=message,
                                      from_email=from_email,
-                                     to_email=["bioconductor.digest@gmail.com"],
+                                     to=["bioconductor.digest@gmail.com"],
                                      bcc=[rec],
                                      connection=connection)
         msg.attach_alternative(message_html, "text/html")
@@ -147,6 +147,6 @@ def send_html_mail(subject, message, message_html, from_email, recipient_list):
     """
     Sends an HTML email.
     """
-    msg = EmailMultiAlternatives(subject=subject, body=message, from_email=from_email, to_email=["bioconductor.digest@gmail.com"], bcc=recipient_list)
+    msg = EmailMultiAlternatives(subject=subject, body=message, from_email=from_email, to=["bioconductor.digest@gmail.com"], bcc=recipient_list)
     msg.attach_alternative(message_html, "text/html")
     msg.send(fail_silently=False)
