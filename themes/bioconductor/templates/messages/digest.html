@@ -7,19 +7,31 @@
 
 {% block html %}
 
-    Here is a list of posts included in your digest:
-    {% for post in posts %}
-        <a href="{{ post.get_absolute_url }}">{{ post.title }}</a>
-    {% endfor %}
+    <p>Here is a list of posts included in your <a href="https://{{ domain }}">Bioconductor support</a> digest:</p>
 
+    {% for post in posts %}
+        <a href="https://{{ domain }}{{ post.get_absolute_url }}">{{ post.title }}</a>
+        <br>
+    {% endfor %}
+    <hr>	
+    <p style="color:#666666">
+        You may visit https://{{ domain }} for additional posts
+    </p>
+
+    <p>The Bioconductor Team</p>
+    
+	
 {% endblock %}
 
 {% block text %}
 
-    Here is a list of posts included in your digest:
+    Here is a list of posts included in your Bioconductor https://{{ domain }} digest:
     {% for post in posts %}
         {{ post.title }}
     {% endfor %}
+    You may visit https://{{ domain }} for additional posts
 
+    The Bioconductor Team
+    
 {% endblock %}
 
