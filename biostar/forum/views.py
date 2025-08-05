@@ -326,7 +326,7 @@ def post_tags(request, tag):
     """
     Show list of posts belonging to one post.
     """
-    posts = post_list(request, tag=tag, cutoff=settings.POSTS_PER_PAGE)
+    posts = post_list(request, tag=tag)
     # Clear tags if no posts are found for it
     tag = tag if posts else ''
     context = dict(posts=posts, tag=tag)
