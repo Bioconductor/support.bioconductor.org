@@ -18,10 +18,11 @@ current *Bioconductor* packages can be found [here](https://bioconductor.org/pac
     * [How do I format a post?](#p2)
     * [How do I put images into my posts?](#p3)
     * [What post tags are automatically suggested?](#p4)
-    * [How can I keep track of topics that interest me?](#p5)
-    * [What are the different post types?](#p6)
-    * [How do I post a Job, Tutorial, or News item?](#p7)
-    * [How do I filter posts?](#p8)
+    * [What are acceptable post tags?](#p5)
+    * [How can I keep track of topics that interest me?](#p6)
+    * [What are the different post types?](#p7)
+    * [How do I post a Job, Tutorial, or News item?](#p8)
+    * [How do I filter posts?](#p9)
   * [Account](#account)
     * [How do I merge multiple previous acccounts?](#a1)
     * [User reputation](#a2)
@@ -174,9 +175,45 @@ your post.
 
 When creating a post, a user is required to enter at least one 'Post Tag'.
 There will be automatically suggested tags. These tags are generated from the
-current list of *Bioconductor* packages as well as biocViews.
+current list of *Bioconductor* packages as well as biocViews and select
+specialized tags. [Tag List](packageList.txt) shows the complete
+alphabeticalized list of official tags.
 
 <a name="p5"></a>
+
+#### What are acceptable post tags?
+
+When creating a post, a user is required to enter at least one official 'Post Tag'.
+There will be automatically suggested tags. These tags are generated from the
+current list of *Bioconductor* packages as well as select specialized tags. [Tag
+List](packageList.txt) shows the complete alphabeticalized list of official
+tags. Specialty tags are as follows:
+
+* Bioconductor
+* Install
+* Website
+* SupportSite
+* Dockers
+* Release
+* Devel
+* CRAN
+* WGCNA
+* Single Package Builder
+* Submission
+* Deprecation
+* Deadline
+* Conference
+* Workshop
+* Build Report
+* Reports
+* Job Posting
+* AnVIL
+
+See [Bioconductor
+Packages](https://bioconductor.org/packages/release/BiocViews.html#___Software)
+for accepted package names. 
+
+<a name="p6"></a>
 
 #### How can I keep track of topics that interest me?
 
@@ -186,7 +223,7 @@ posts that match your tagging criteria into a special tab that you can check
 whenever you log in. And 'Watched Tags' should actually email you whenever
 someone posts using a tag that you are interested in.
 
-<a name="p6"></a>
+<a name="p7"></a>
 
 #### What are the different post types?
 
@@ -199,14 +236,14 @@ are:
   * Share a Tutorial: Share a tutorial for a bioinformatic analysis or *Bioconductor* package
   * Announce News: Announce breaking news about *Bioconductor* or package to the community at large
 
-<a name="p7"></a>
+<a name="p8"></a>
 
 #### How do I post a Job, Tutorial, or News item?
 
 Follow the ASK A QUESTION link and choose the appropriate field in the 'Post
 Type' drop down box.
 
-<a name="p8"></a>
+<a name="p9"></a>
 
 #### How do I filter posts?
 
