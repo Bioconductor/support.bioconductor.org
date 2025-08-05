@@ -19,7 +19,7 @@ TAGS_OPTIONS_FILE = os.path.join(CUSTOM_THEME, 'tags', 'tags.txt')
 # Ensure at least one tag in file is included.
 REQUIRED_TAGS = os.path.join(CUSTOM_THEME, 'tags', 'packageList.txt')
 
-REQUIRED_TAGS_URL = 'https://bioconductor.org/packages/devel/BiocViews.html#___Software'
+REQUIRED_TAGS_URL = 'https://support.bioconductor.org/info/faq/#p5'
 
 # Rate to limit
 RATELIMIT_RATE = '200/d'

@@ -18,7 +18,7 @@ current *Bioconductor* packages can be found [here](https://bioconductor.org/pac
     * [How do I format a post?](#p2)
     * [How do I put images into my posts?](#p3)
     * [What post tags are automatically suggested?](#p4)
-    * [What are acceptable post tags?](#p5)
+    * [What are acceptable 'required' post tags?](#p5)
     * [How can I keep track of topics that interest me?](#p6)
     * [What are the different post types?](#p7)
     * [How do I post a Job, Tutorial, or News item?](#p8)
@@ -176,18 +176,19 @@ your post.
 When creating a post, a user is required to enter at least one 'Post Tag'.
 There will be automatically suggested tags. These tags are generated from the
 current list of *Bioconductor* packages as well as biocViews and select
-specialized tags. [Tag List](packageList.txt) shows the complete
-alphabeticalized list of official tags.
+specialized tags. 
 
 <a name="p5"></a>
 
-#### What are acceptable post tags?
+#### What are acceptable 'required' post tags?
 
 When creating a post, a user is required to enter at least one official 'Post Tag'.
-There will be automatically suggested tags. These tags are generated from the
-current list of *Bioconductor* packages as well as select specialized tags. [Tag
-List](packageList.txt) shows the complete alphabeticalized list of official
-tags. Specialty tags are as follows:
+There will be automatically suggested tags in the drop down menu. These tags are
+generated from the current list of *Bioconductor* packages as well as select
+specialized tags. See [Bioconductor Packages](https://bioconductor.org/packages/release/BiocViews.html#___Software)
+for current list of package names that are meet the requirement. Specialty tags
+that are also accepted are:
+
 
 * Bioconductor
 * Install
@@ -209,9 +210,7 @@ tags. Specialty tags are as follows:
 * Job Posting
 * AnVIL
 
-See [Bioconductor
-Packages](https://bioconductor.org/packages/release/BiocViews.html#___Software)
-for accepted package names. 
+ 
 
 <a name="p6"></a>
 
