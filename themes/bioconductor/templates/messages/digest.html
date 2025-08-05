@@ -7,11 +7,11 @@
 
 {% block html %}
 
-    <p>Here is a list of posts included in your <a href="https://{{ domain }}">Bioconductor support</a> digest:</p>
+    <p>Here is a list of posts included in your <a href="https://{{ domain }}">Bioconductor support</a> digest:</p><br>
 
     {% for post in posts %}
         <a href="https://{{ domain }}{{ post.get_absolute_url }}">{{ post.title }}</a>
-        <br>
+        <br><br>
     {% endfor %}
     <hr>	
     <p style="color:#666666">
