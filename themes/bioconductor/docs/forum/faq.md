@@ -186,7 +186,7 @@ When creating a post, a user is required to enter at least one official 'Post Ta
 There will be automatically suggested tags in the drop down menu. These tags are
 generated from the current list of *Bioconductor* packages as well as select
 specialized tags. See [Bioconductor Packages](https://bioconductor.org/packages/release/BiocViews.html#___Software)
-for current list of package names that are meet the requirement. Specialty tags
+for current list of package names that  meet the requirement. Specialty tags
 that are also accepted are:
 
 
