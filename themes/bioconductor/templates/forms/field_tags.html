@@ -1,0 +1,16 @@
+<select multiple="multiple" name="{{ form_field.name }}" id="{{ form_field.id_for_label }}" 
+        class="ui search selection dropdown tags" data-placeholder="Select tags">
+    {% for value, is_selected in dropdown_options %}
+        <option value="{{ value }}" {% if is_selected or value == 'Bioconductor' %}selected{% endif %}>
+            {{ value }}
+        </option>
+    {% endfor %}
+</select>
+
+<script>
+  $(document).ready(function() {
+    $('.ui.dropdown.tags').dropdown({
+      allowAdditions: true  // optional, only if you want new tags allowed
+    }).dropdown('set selected', ['Bioconductor']);
+  });
+</script>

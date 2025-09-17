@@ -176,7 +176,10 @@ class PostLongForm(forms.Form):
     tag_val = forms.CharField(label="Post Tags", max_length=MAX_TAG_LEN, required=True, validators=[valid_tag],
 
                               widget=get_tags_widget(attrs={'id': 'tag_val'}),
-                              help_text="""Create a new tag by typing a word then adding a comma.""")
+                              help_text=mark_safe("""Strongly encourage tagging with
+                              package name. <a
+                              href="https://support.bioconductor.org/info/faq/#p5"
+                              target="_blank">Acceptable Tags</a>."""))
 
     content = forms.CharField(widget=forms.Textarea,
                               validators=[validate_ascii],
