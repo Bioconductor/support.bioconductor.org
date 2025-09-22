@@ -118,3 +118,66 @@ body {
     background-color: #87B13F !important;
     color: white;
 }
+
+/* ========================================
+   Accessibility improvements for dropdowns
+   ======================================== */
+
+/* Ensure native select elements are accessible when JavaScript is disabled */
+.ui.dropdown select {
+    opacity: 1 !important;
+    position: static !important;
+    height: auto !important;
+    width: 100% !important;
+    visibility: visible !important;
+}
+
+/* Style native selects to look consistent */
+.ui.dropdown.disabled select,
+noscript .ui.dropdown select {
+    display: block !important;
+    opacity: 1 !important;
+    position: static !important;
+    height: auto !important;
+    width: 100% !important;
+    visibility: visible !important;
+    background: white;
+    border: 1px solid rgba(34,36,38,.15);
+    border-radius: .28571429rem;
+    padding: .67857143em 1em;
+    font-size: 1em;
+    line-height: 1.21428571em;
+}
+
+/* Hide the custom dropdown UI when JavaScript is disabled */
+noscript .ui.dropdown .text,
+noscript .ui.dropdown .dropdown.icon {
+    display: none !important;
+}
+
+/* Ensure focus is visible on all interactive elements */
+.ui.dropdown:focus,
+.ui.dropdown select:focus {
+    outline: 2px solid #0066cc;
+    outline-offset: 2px;
+}
+
+/* Improve screen reader announcements */
+.sr-only {
+    position: absolute;
+    left: -10000px;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+}
+
+/* Ensure form validation messages are accessible */
+.field .error.message {
+    color: #9f3a38;
+    font-weight: 600;
+}
+
+.field .error.message:before {
+    content: "Error: ";
+    font-weight: bold;
+}

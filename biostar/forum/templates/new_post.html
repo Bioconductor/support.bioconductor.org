@@ -41,7 +41,7 @@
                         <div class="required field">
                             <label>{{ form.post_type.label }}</label>
                             {{ form.post_type }}
-                            <p class="muted" style="display: contents; ">{{ form.post_type.help_text }} Click here for
+                            <p class="muted" id="post_type_help" style="display: contents; ">{{ form.post_type.help_text }} Click here for
                                 more</p> {% include 'forms/help_text.html' %}
                         </div>
 
@@ -51,7 +51,7 @@
                             {% block new_tag_val %}
                             {{ form.tag_val }}
                             {% endblock %}
-                            <p class="muted">{{ form.tag_val.help_text }}</p>
+                            <p class="muted" id="tag_val_help">{{ form.tag_val.help_text }}</p>
                         </div>
 
 
