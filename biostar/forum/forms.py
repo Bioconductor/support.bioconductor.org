@@ -177,7 +177,7 @@ class PostLongForm(forms.Form):
 
                               widget=get_tags_widget(attrs={'id': 'tag_val'}),
                               help_text=mark_safe("""Strongly encourage tagging with
-                              package name. <a
+                              package name. Use 'Bioconductor' if unsure or see: <a
                               href="https://support.bioconductor.org/info/faq/#p5"
                               target="_blank">Acceptable Tags</a>."""))
 
