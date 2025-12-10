@@ -1,8 +1,10 @@
-## Biostar Central
+## Bioconductor Support Site
 
 ### Software for better science.
 
-**Biostar Central** is a [Python][python] and [Django][django] based collection of web applications that support scientific practice and education.
+The Bioconductor support site is based on **Biostar Central** which is a
+[Python][python] and [Django][django] based collection of web applications that
+support scientific practice and education.
 
 The goal of the project is to produce software with straightforward installation and minimal dependencies that works on any computing platform that supports Python. For each app the philosophy is that of decentralization and self hosting. We write our code to allow others to recreate the same services that we run.
 
@@ -42,6 +44,36 @@ Our installation instructions rely on [conda][conda] though other alternatives f
 The installation is now complete.
 
 All server management commands are run through `make`.
+
+## Installation for Bioconductor using pyenv
+
+If you prefer to use `pyenv` to manage your python versions you can follow
+these steps:
+
+    # Clone the source server code and the recipe code.
+    git clone https://github.com/Bioconductor/support.bioconductor.org
+
+    # Switch to the directory.
+    cd support.bioconductor.org
+
+    # Install python 3.6.15
+    pyenv install 3.6.15
+
+    # Create a virtual environment named engine
+    pyenv virtualenv 3.6.15 engine
+
+    # Activate the virtual environment
+    pyenv activate engine
+
+    # Install server dependencies.
+    pip install -r conf/requirements.txt
+
+## Bioconductor Support Site configuration
+
+To test the installation and run the Bioconductor Support Site run:
+
+    # For the forum app
+    python manage.py runserver --settings=themes.bioconductor.settings
 
 ## Demo server
 
