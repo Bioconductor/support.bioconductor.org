@@ -123,6 +123,12 @@ body {
    Accessibility improvements for dropdowns
    ======================================== */
 
+/* Keep native select accessible for screen readers while Semantic UI enhances it */
+.ui.dropdown.accessible-dropdown {
+    /* Ensure the select element is not completely hidden */
+    position: relative !important;
+}
+
 /* Ensure native select elements are accessible when JavaScript is disabled */
 .ui.dropdown select {
     opacity: 1 !important;
@@ -132,9 +138,23 @@ body {
     visibility: visible !important;
 }
 
+/* When Semantic UI is active, keep select minimally visible for screen readers */
+.ui.dropdown.accessible-dropdown.active select,
+.ui.dropdown.accessible-dropdown.visible select {
+    /* Keep it accessible but visually hidden when dropdown is enhanced */
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    height: 1px;
+    overflow: hidden;
+    position: absolute;
+    white-space: nowrap;
+    width: 1px;
+}
+
 /* Style native selects to look consistent */
 .ui.dropdown.disabled select,
-noscript .ui.dropdown select {
+noscript .ui.dropdown select,
+.no-js .ui.dropdown select {
     display: block !important;
     opacity: 1 !important;
     position: static !important;
@@ -147,28 +167,37 @@ noscript .ui.dropdown select {
     padding: .67857143em 1em;
     font-size: 1em;
     line-height: 1.21428571em;
+    min-height: 80px;
 }
 
 /* Hide the custom dropdown UI when JavaScript is disabled */
 noscript .ui.dropdown .text,
-noscript .ui.dropdown .dropdown.icon {
+noscript .ui.dropdown .dropdown.icon,
+.no-js .ui.dropdown .text,
+.no-js .ui.dropdown .dropdown.icon {
     display: none !important;
 }
 
 /* Ensure focus is visible on all interactive elements */
 .ui.dropdown:focus,
-.ui.dropdown select:focus {
-    outline: 2px solid #0066cc;
-    outline-offset: 2px;
+.ui.dropdown:focus-within,
+.ui.dropdown select:focus,
+.ui.dropdown.accessible-dropdown:focus-within {
+    outline: 2px solid #0066cc !important;
+    outline-offset: 2px !important;
 }
 
 /* Improve screen reader announcements */
-.sr-only {
+.sr-only,
+[role="status"][aria-live="polite"] {
     position: absolute;
     left: -10000px;
     width: 1px;
     height: 1px;
     overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
 }
 
 /* Ensure form validation messages are accessible */
@@ -180,4 +209,16 @@ noscript .ui.dropdown .dropdown.icon {
 .field .error.message:before {
     content: "Error: ";
     font-weight: bold;
+}
+
+/* Ensure dropdown menu items are keyboard accessible */
+.ui.dropdown .menu > .item {
+    cursor: pointer;
+}
+
+.ui.dropdown .menu > .item:focus,
+.ui.dropdown .menu > .item.selected {
+    background: rgba(0, 0, 0, 0.05) !important;
+    outline: 2px solid #0066cc !important;
+    outline-offset: -2px !important;
 }
