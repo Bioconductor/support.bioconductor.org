@@ -15,6 +15,10 @@ function tags_dropdown() {
             escape: 27,
             tab: 9
         },
+        // Callback after dropdown is shown
+        onShow: function() {
+            enhance_tags_dropdown_aria($(this));
+        },
         // Get form field to add to
         onChange: function (value, text, $selectedItem) {
             // Get form field to add to
@@ -25,6 +29,9 @@ function tags_dropdown() {
             value = $('<div/>').text(value).html();
             tag_field.val(value);
             
+            // Update ARIA attributes
+            enhance_tags_dropdown_aria($(this));
+            
             // Announce to screen readers
             if (!$('#tags-announcement').length) {
                 $('body').append('<div id="tags-announcement" role="status" aria-live="polite" aria-atomic="true" style="position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden;"></div>');
@@ -34,9 +41,20 @@ function tags_dropdown() {
     });
     
     // Ensure dropdown has proper ARIA attributes
-    $('.tags').attr('role', 'listbox');
-    $('.tags[multiple]').attr('aria-multiselectable', 'true');
+    $('.tags').each(function() {
+        var $dropdown = $(this);
+        $dropdown.attr('role', 'combobox');
+        $dropdown.attr('aria-haspopup', 'listbox');
+        if ($dropdown.attr('multiple')) {
+            $dropdown.attr('aria-multiselectable', 'true');
+        }
+    });
     $('.tags .dropdown.icon').attr('aria-hidden', 'true');
+    
+    // Initial ARIA enhancement
+    $('.tags').each(function() {
+        enhance_tags_dropdown_aria($(this));
+    });
     
     $('.tags > input.search').keydown(function (event) {
         // Prevent submitting form when adding tag by pressing ENTER.
@@ -55,6 +73,44 @@ function tags_dropdown() {
             return value
         }
     })
+}
+
+// Enhance tags dropdown with proper ARIA attributes
+function enhance_tags_dropdown_aria($dropdown) {
+    // Find the menu element
+    var $menu = $dropdown.children('.menu');
+    if ($menu.length > 0) {
+        // Check if menu is visible
+        var isVisible = $menu.hasClass('visible') || $menu.hasClass('active');
+        $dropdown.attr('aria-expanded', isVisible ? 'true' : 'false');
+        
+        // Ensure menu has proper ID
+        if (!$menu.attr('id')) {
+            var dropdownId = $dropdown.attr('id') || 'tags-dropdown-' + Math.random().toString(36).substr(2, 9);
+            $dropdown.attr('id', dropdownId);
+            $menu.attr('id', dropdownId + '-menu');
+        }
+        
+        // Set role on menu
+        $menu.attr('role', 'listbox');
+        
+        // Link dropdown to its menu
+        $dropdown.attr('aria-controls', $menu.attr('id'));
+        
+        // Enhance menu items
+        $menu.find('.item').each(function(index) {
+            var $item = $(this);
+            $item.attr('role', 'option');
+            $item.attr('tabindex', '-1');
+            
+            // Mark selected items
+            if ($item.hasClass('selected') || $item.hasClass('active')) {
+                $item.attr('aria-selected', 'true');
+            } else {
+                $item.attr('aria-selected', 'false');
+            }
+        });
+    }
 }
 
 // Initialize all dropdowns with accessibility features
@@ -76,6 +132,20 @@ function init_accessible_dropdowns() {
                 enter: 13,
                 escape: 27,
                 tab: 9
+            },
+            // Callback after dropdown is initialized and shown
+            onShow: function() {
+                enhance_dropdown_aria($dropdown);
+            },
+            onChange: function(value, text, $selectedItem) {
+                // Update ARIA attributes when selection changes
+                enhance_dropdown_aria($dropdown);
+                
+                // Announce selection to screen readers
+                if (!$('#dropdown-announcement').length) {
+                    $('body').append('<div id="dropdown-announcement" role="status" aria-live="polite" aria-atomic="true" style="position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden;"></div>');
+                }
+                $('#dropdown-announcement').text('Selected: ' + text);
             }
         });
         
@@ -89,7 +159,63 @@ function init_accessible_dropdowns() {
         
         // Make dropdown icons decorative
         $dropdown.find('.dropdown.icon').attr('aria-hidden', 'true');
+        
+        // Initial ARIA enhancement
+        enhance_dropdown_aria($dropdown);
     });
+}
+
+// Enhance Semantic UI dropdown with proper ARIA attributes for screen readers
+function enhance_dropdown_aria($dropdown) {
+    // Ensure the dropdown element has proper ID
+    if (!$dropdown.attr('id')) {
+        var randomId = 'dropdown-' + Math.random().toString(36).substr(2, 9);
+        $dropdown.attr('id', randomId);
+    }
+    
+    // Set role and ARIA attributes on the main dropdown container
+    $dropdown.attr('role', 'combobox');
+    $dropdown.attr('aria-haspopup', 'listbox');
+    
+    // Find the menu element
+    var $menu = $dropdown.children('.menu');
+    if ($menu.length > 0) {
+        // Check if menu is visible
+        var isVisible = $menu.hasClass('visible') || $menu.hasClass('active');
+        $dropdown.attr('aria-expanded', isVisible ? 'true' : 'false');
+        
+        // Ensure menu has proper ID
+        if (!$menu.attr('id')) {
+            $menu.attr('id', $dropdown.attr('id') + '-menu');
+        }
+        
+        // Set role on menu
+        $menu.attr('role', 'listbox');
+        
+        // Link dropdown to its menu
+        $dropdown.attr('aria-controls', $menu.attr('id'));
+        
+        // Enhance menu items
+        $menu.find('.item').each(function(index) {
+            var $item = $(this);
+            $item.attr('role', 'option');
+            $item.attr('tabindex', '-1');
+            
+            // Mark selected items
+            if ($item.hasClass('selected') || $item.hasClass('active')) {
+                $item.attr('aria-selected', 'true');
+            } else {
+                $item.attr('aria-selected', 'false');
+            }
+        });
+    }
+    
+    // Get current selected text and update aria-label
+    var currentText = $dropdown.find('.text').text().trim();
+    if (currentText && currentText !== $dropdown.data('placeholder')) {
+        var baseLabel = $dropdown.attr('aria-label') || 'Select option';
+        $dropdown.attr('aria-label', baseLabel + ', currently selected: ' + currentText);
+    }
 }
 
 $(document).ready(function () {

@@ -47,10 +47,17 @@
                 escape: 27,
                 tab: 9
             },
+            // Callback after dropdown is shown
+            onShow: function() {
+                enhanceAccessibleDropdownAria();
+            },
             // Ensure the original select stays synchronized
             onChange: function(value, text, $choice) {
                 // Ensure the hidden select is properly updated
                 $dropdown.val(value).trigger('change');
+                
+                // Update ARIA attributes
+                enhanceAccessibleDropdownAria();
                 
                 // Announce changes to screen readers
                 var announcement = 'Selected tags: ' + (Array.isArray(value) ? value.join(', ') : (value || 'none'));
@@ -58,12 +65,57 @@
             }
         });
         
-        // Ensure the dropdown has proper ARIA attributes
-        $dropdown.attr('role', 'listbox');
-        $dropdown.attr('aria-multiselectable', 'true');
+        // Function to enhance ARIA attributes on the Semantic UI generated elements
+        function enhanceAccessibleDropdownAria() {
+            // Ensure the dropdown element has proper ID
+            if (!$dropdown.attr('id')) {
+                $dropdown.attr('id', 'tag_val');
+            }
+            
+            // Set role and ARIA attributes on the main dropdown container
+            $dropdown.attr('role', 'combobox');
+            $dropdown.attr('aria-haspopup', 'listbox');
+            $dropdown.attr('aria-multiselectable', 'true');
+            
+            // Find the menu element
+            var $menu = $dropdown.children('.menu');
+            if ($menu.length > 0) {
+                // Check if menu is visible
+                var isVisible = $menu.hasClass('visible') || $menu.hasClass('active');
+                $dropdown.attr('aria-expanded', isVisible ? 'true' : 'false');
+                
+                // Ensure menu has proper ID
+                if (!$menu.attr('id')) {
+                    $menu.attr('id', $dropdown.attr('id') + '-menu');
+                }
+                
+                // Set role on menu
+                $menu.attr('role', 'listbox');
+                
+                // Link dropdown to its menu
+                $dropdown.attr('aria-controls', $menu.attr('id'));
+                
+                // Enhance menu items
+                $menu.find('.item').each(function(index) {
+                    var $item = $(this);
+                    $item.attr('role', 'option');
+                    $item.attr('tabindex', '-1');
+                    
+                    // Mark selected items
+                    if ($item.hasClass('selected') || $item.hasClass('active')) {
+                        $item.attr('aria-selected', 'true');
+                    } else {
+                        $item.attr('aria-selected', 'false');
+                    }
+                });
+            }
+        }
         
         // Make the dropdown icon decorative only
         $dropdown.siblings('.dropdown.icon').attr('aria-hidden', 'true');
+        
+        // Initial ARIA enhancement
+        enhanceAccessibleDropdownAria();
         
         // Set initial selection if provided
         {% if initial %}
