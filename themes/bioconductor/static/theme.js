@@ -32,11 +32,11 @@ function tags_dropdown() {
             // Update ARIA attributes
             enhance_tags_dropdown_aria($(this));
             
-            // Announce to screen readers
+            // Announce to screen readers (just the tag text, no prefix)
             if (!$('#tags-announcement').length) {
                 $('body').append('<div id="tags-announcement" role="status" aria-live="polite" aria-atomic="true" style="position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden;"></div>');
             }
-            $('#tags-announcement').text('Selected: ' + text);
+            $('#tags-announcement').text(text);
         }
     });
     
@@ -141,11 +141,11 @@ function init_accessible_dropdowns() {
                 // Update ARIA attributes when selection changes
                 enhance_dropdown_aria($dropdown);
                 
-                // Announce selection to screen readers
+                // Announce selection to screen readers (just the option text, no prefix)
                 if (!$('#dropdown-announcement').length) {
                     $('body').append('<div id="dropdown-announcement" role="status" aria-live="polite" aria-atomic="true" style="position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden;"></div>');
                 }
-                $('#dropdown-announcement').text('Selected: ' + text);
+                $('#dropdown-announcement').text(text);
             }
         });
         
@@ -210,11 +210,23 @@ function enhance_dropdown_aria($dropdown) {
         });
     }
     
-    // Get current selected text and update aria-label
+    // Update aria-label to reflect current selection without repetition
     var currentText = $dropdown.find('.text').text().trim();
-    if (currentText && currentText !== $dropdown.data('placeholder')) {
-        var baseLabel = $dropdown.attr('aria-label') || 'Select option';
-        $dropdown.attr('aria-label', baseLabel + ', currently selected: ' + currentText);
+    var placeholder = $dropdown.data('placeholder') || '';
+    
+    // Only update if there's a valid selection (not placeholder text)
+    if (currentText && currentText !== placeholder && currentText !== 'Select post type' && currentText !== '') {
+        // Use a clean aria-label with just the current selection
+        $dropdown.attr('aria-label', currentText);
+    } else {
+        // Reset to base label when no selection
+        var baseLabel = $dropdown.attr('data-base-label');
+        if (!baseLabel) {
+            // Store the original aria-label on first run
+            baseLabel = $dropdown.attr('aria-label') || 'Select option';
+            $dropdown.attr('data-base-label', baseLabel);
+        }
+        $dropdown.attr('aria-label', baseLabel);
     }
 }
 

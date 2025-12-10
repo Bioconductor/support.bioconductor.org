@@ -59,9 +59,11 @@
                 // Update ARIA attributes
                 enhanceAccessibleDropdownAria();
                 
-                // Announce changes to screen readers
-                var announcement = 'Selected tags: ' + (Array.isArray(value) ? value.join(', ') : (value || 'none'));
-                $('#tags-announcement').text(announcement);
+                // Announce changes to screen readers (just the tag values, no prefix)
+                var announcement = Array.isArray(value) ? value.join(', ') : (value || '');
+                if (announcement) {
+                    $('#tags-announcement').text(announcement);
+                }
             }
         });
         
