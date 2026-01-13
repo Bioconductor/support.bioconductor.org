@@ -1,38 +1,52 @@
 <span class="ui dropdown">
-  <a class="text">help
-      <i class="universal access icon"></i></a>
+  <button
+    class="text"
+    id="help-button"
+    aria-haspopup="true"
+    aria-expanded="false"
+    aria-controls="help-menu"
+    id="help-button"
+    style="color: #4183c4;">
+    help
+    <i class="universal access icon" aria-hidden="true"></i>
+  </button>
 
-  <div class="ui menu helpers">
+  <div class="ui menu helpers" role="menu" id="help-menu" aria-labelledby="help-button">
 
-    <div class=" disabled item">
-        <i class="question icon"></i>Ask a Question
-
-        <div class="muted" style="padding-top: 10px">Ask a specific question fitting the topics of this forum.</div>
+    <div class="disabled item" role="menuitem" aria-disabled="true"
+        aria-label="Ask a Question: Ask a specific question fitting the topics of this forum.">
+      <i class="question icon" aria-hidden="true"></i>
+      <span aria-hidden="true">Ask a Question</span>
+      <div class="muted" style="padding-top: 10px; font-size: 0.9em;" aria-hidden="true">
+          Ask a specific question fitting the topics of this forum.
+      </div>
     </div>
 
-      <div class=" disabled item">
-         <i class="paste icon"></i>Share a Tutorial
-
-        <div class="muted" style="padding-top: 10px">Share a bioinformatic tutorial. </div>
-
+    <div class="disabled item" role="menuitem" aria-disabled="true"
+        aria-label="Share a Tutorial: Share a bioinformatic tutorial.">
+      <i class="paste icon" aria-hidden="true"></i>
+      <span aria-hidden="true">Share a Tutorial</span>
+      <div class="muted" style="padding-top: 10px; font-size: 0.9em;" aria-hidden="true">
+          Share a bioinformatic tutorial.
       </div>
-      <div class="disabled item">
-        <i class="briefcase icon"></i> Post a Job Opening
+    </div>
 
-        <div class="muted" style="padding-top: 10px">
-                  Recruit new hires by posting
-                a job opening for an appropriate company.
-        </div>
-
-
+    <div class="disabled item" role="menuitem" aria-disabled="true"
+        aria-label="Post a Job Opening: Recruit new hires by posting a job opening for an appropriate company.">
+      <i class="briefcase icon" aria-hidden="true"></i>
+      <span aria-hidden="true">Post a Job Opening</span>
+      <div class="muted" style="padding-top: 10px; font-size: 0.9em;" aria-hidden="true">
+          Recruit new hires by posting a job opening for an appropriate company.
       </div>
-       <div class="disabled item">
+    </div>
 
-      <i class="newspaper icon"></i> Announce News
-             <div class="muted" style="padding-top: 10px">
-                  Announce interesting news to the community at large.
-        </div>
-
+    <div class="disabled item" role="menuitem" aria-disabled="true"
+        aria-label="Announce News: Announce interesting news to the community at large.">
+      <i class="newspaper icon" aria-hidden="true"></i>
+      <span aria-hidden="true">Announce News</span>
+      <div class="muted" style="padding-top: 10px; font-size: 0.9em;" aria-hidden="true">
+          Announce interesting news to the community at large.
+      </div>
     </div>
 
   </div>
