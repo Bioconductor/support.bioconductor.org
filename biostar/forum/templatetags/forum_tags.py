@@ -320,8 +320,12 @@ def inplace_type_field(post=None, field_id='type'):
     (opt[0] in Post.TOP_LEVEL), choices)
 
     post_type = forms.IntegerField(label="Post Type",
-                                   widget=forms.Select(choices=choices, attrs={'class': "ui fluid dropdown",
-                                                                               'id': field_id}),
+                                   widget=forms.Select(choices=choices, attrs={
+                                       'class': "ui fluid dropdown",
+                                       'id': field_id,
+                                       'aria-label': "Select post type",
+                                       'aria-required': "true"
+                                   }),
                                    help_text="Select a post type.")
 
     value = post.type if post else Post.QUESTION

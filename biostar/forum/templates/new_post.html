@@ -32,26 +32,26 @@
 
 
                         <div class="required field">
-                            <label>{{ form.title.label }}</label>
+                            <label for="{{ form.title.id_for_label }}">{{ form.title.label }}</label>
                             {{ form.title }}
                             <p class="muted">{{ form.title.help_text }}</p>
                         </div>
 
 
                         <div class="required field">
-                            <label>{{ form.post_type.label }}</label>
+                            <label for="{{ form.post_type.id_for_label }}">{{ form.post_type.label }}</label>
                             {{ form.post_type }}
-                            <p class="muted" style="display: contents; ">{{ form.post_type.help_text }} Click here for
-                                more</p> {% include 'forms/help_text.html' %}
+                            <p class="muted" id="post_type_help" style="display: contents; ">{{ form.post_type.help_text }} Click here for
+                                description</p> {% include 'forms/help_text.html' %}
                         </div>
 
 
                         <div class="required field">
-                            <label>{{ form.tag_val.label }}</label>
+                            <label for="{{ form.tag_val.id_for_label }}">{{ form.tag_val.label }}</label>
                             {% block new_tag_val %}
                             {{ form.tag_val }}
                             {% endblock %}
-                            <p class="muted">{{ form.tag_val.help_text }}</p>
+                            <p class="muted" id="tag_val_help">{{ form.tag_val.help_text }}</p>
                         </div>
 
 

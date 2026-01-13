@@ -168,7 +168,12 @@ class PostLongForm(forms.Form):
     choices = informative_choices(choices=choices)
 
     post_type = forms.IntegerField(label="Post Type",
-                                   widget=forms.Select(choices=choices, attrs={'class': "ui dropdown"}),
+                                   widget=forms.Select(choices=choices, attrs={
+                                       'class': "ui dropdown",
+                                       'aria-label': "Select post type",
+                                       'aria-required': "true",
+                                       'aria-describedby': "post_type_help"
+                                   }),
                                    help_text="Select a post type.")
     title = forms.CharField(label="Post Title", max_length=200, min_length=2,
                             validators=[valid_title, validate_ascii],

@@ -1,20 +1,131 @@
 
-    {% if initial %}
-
-        <input type="hidden" name="{{ form_field.name }}" id="{{ form_field.id_for_label }}" value="{{ initial }}">
-    {% else %}
-        <input type="hidden" name="{{ form_field.name }}" id="{{ form_field.id_for_label }}">
-
-    {% endif %}
-
-    <select multiple="multiple" data-value="{{ form_field.id_for_label }}" class="ui search selection dropdown tags">
-    <option value="">Search tags</option>
+    <!-- Use native select for better screen reader accessibility -->
+<select multiple="multiple" 
+        name="{{ form_field.name }}" 
+        id="{{ form_field.id_for_label }}" 
+        class="ui search selection dropdown tags accessible-dropdown"
+        aria-label="Select post tags. Use arrow keys to navigate, space or enter to select. Hold Ctrl or Cmd to select multiple tags."
+        aria-required="true"
+        aria-describedby="tag_val_help"
+        data-placeholder="Select tags"
+        tabindex="0">
     {% for value, is_selected in dropdown_options %}
-
         <option value="{{ value }}" {% if is_selected %}selected="selected"{% endif %}>
-        {{ value }}
+            {{ value }}
         </option>
-
     {% endfor %}
+</select>
 
-    </select>
+<!-- Screen reader announcement region -->
+<div id="tags-announcement" role="status" aria-live="polite" aria-atomic="true" style="position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden;"></div>
+
+<script>
+(function() {
+    // Initialize Semantic UI dropdown with accessibility enhancements
+    $(document).ready(function() {
+        var $dropdown = $('.ui.dropdown.tags.accessible-dropdown');
+        
+        // Don't initialize if dropdown is not found
+        if ($dropdown.length === 0) return;
+        
+        // Initialize with accessibility-friendly settings
+        $dropdown.dropdown({
+            allowAdditions: true,
+            hideAdditions: false,
+            forceSelection: false,
+            // Preserve the select element for screen readers
+            preserveHTML: true,
+            // Make sure keyboard navigation works
+            keys: {
+                delimiter: false,  // Don't use delimiter
+                deleteKey: 8,      // backspace
+                leftArrow: 37,
+                upArrow: 38,
+                rightArrow: 39,
+                downArrow: 40,
+                enter: 13,
+                escape: 27,
+                tab: 9
+            },
+            // Callback after dropdown is shown
+            onShow: function() {
+                enhanceAccessibleDropdownAria();
+            },
+            // Ensure the original select stays synchronized
+            onChange: function(value, text, $choice) {
+                // Ensure the hidden select is properly updated
+                $dropdown.val(value).trigger('change');
+                
+                // Update ARIA attributes
+                enhanceAccessibleDropdownAria();
+                
+                // Announce changes to screen readers (just the tag values, no prefix)
+                var announcement = Array.isArray(value) ? value.join(', ') : (value || '');
+                if (announcement) {
+                    $('#tags-announcement').text(announcement);
+                }
+            }
+        });
+        
+        // Function to enhance ARIA attributes on the Semantic UI generated elements
+        function enhanceAccessibleDropdownAria() {
+            // Ensure the dropdown element has proper ID
+            if (!$dropdown.attr('id')) {
+                $dropdown.attr('id', 'tag_val');
+            }
+            
+            // Set role and ARIA attributes on the main dropdown container
+            $dropdown.attr('role', 'combobox');
+            $dropdown.attr('aria-haspopup', 'listbox');
+            $dropdown.attr('aria-multiselectable', 'true');
+            
+            // Find the menu element
+            var $menu = $dropdown.children('.menu');
+            if ($menu.length > 0) {
+                // Check if menu is visible
+                var isVisible = $menu.hasClass('visible') || $menu.hasClass('active');
+                $dropdown.attr('aria-expanded', isVisible ? 'true' : 'false');
+                
+                // Ensure menu has proper ID
+                if (!$menu.attr('id')) {
+                    $menu.attr('id', $dropdown.attr('id') + '-menu');
+                }
+                
+                // Set role on menu
+                $menu.attr('role', 'listbox');
+                
+                // Link dropdown to its menu
+                $dropdown.attr('aria-controls', $menu.attr('id'));
+                
+                // Enhance menu items
+                $menu.find('.item').each(function(index) {
+                    var $item = $(this);
+                    $item.attr('role', 'option');
+                    $item.attr('tabindex', '-1');
+                    
+                    // Mark selected items
+                    if ($item.hasClass('selected') || $item.hasClass('active')) {
+                        $item.attr('aria-selected', 'true');
+                    } else {
+                        $item.attr('aria-selected', 'false');
+                    }
+                });
+            }
+        }
+        
+        // Make the dropdown icon decorative only
+        $dropdown.siblings('.dropdown.icon').attr('aria-hidden', 'true');
+        
+        // Initial ARIA enhancement
+        enhanceAccessibleDropdownAria();
+        
+        // Set initial selection if provided
+        {% if initial %}
+        var initialTags = '{{ initial }}'.split(',').map(function(tag) { return tag.trim(); }).filter(function(tag) { return tag; });
+        if (initialTags.length > 0) {
+            $dropdown.dropdown('set selected', initialTags);
+        }
+        {% endif %}
+    });
+})();
+</script>
